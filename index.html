@@ -68,6 +68,7 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 .seg{display:flex;gap:6px}
 .seg button{flex:1;height:38px;border-radius:9px;border:1px solid var(--line);background:var(--bg);font:inherit;font-size:12px;color:var(--ink)}
 .seg button.sel{border-color:var(--accent);background:#fbe9d6}
+#vPick2{margin-top:0}
 #roadList{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-bottom:8px}
 .rd{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .rdh{display:flex;align-items:center;gap:10px}
@@ -142,6 +143,7 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 <div class="ro"><span>SCORE</span><b id="rScore" style="color:var(--accent)">none</b></div>
 <div class="ro"><span>MPH</span><b id="rMph">none</b></div>
 </div>
+<select id="vPick2" aria-label="Vehicle"></select>
 <canvas id="cRoad"></canvas>
 <div class="trip" id="rRoadName"></div>
 <div class="trip" id="rRec">Not recording.</div>
@@ -195,7 +197,10 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 <label>Steering smoothing<select id="sSmooth"><option value="6">Quick</option><option value="3">Normal</option><option value="1.2">Calm</option></select></label>
 <label>Bump and spike threshold <output id="oBump"></output><input type="range" id="sBump" min="1" max="10" step="0.5"></label>
 <label class="chk"><input type="checkbox" id="sWake"> Keep screen awake</label>
-<div class="dsec">MY VEHICLE</div>
+<div class="dsec">MY VEHICLES</div>
+<label>Driving now<select id="vPick"></select></label>
+<div class="seg" style="margin-bottom:12px"><button id="vAdd">ADD VEHICLE</button><button id="vDel">REMOVE</button></div>
+<label>Nickname<input type="text" id="vNick" autocomplete="off"></label>
 <label>Type<select id="vType"><option value="car">Car</option><option value="suv">SUV or crossover</option><option value="pickup">Pickup</option><option value="dually">Dually pickup</option><option value="van">Van</option><option value="box">Box truck</option><option value="semi">Semi truck</option><option value="rv">RV or motorhome</option><option value="other">Other</option></select></label>
 <label>Make<input type="text" id="vMake" autocomplete="off"></label>
 <label>Model<input type="text" id="vModel" autocomplete="off"></label>
@@ -203,6 +208,7 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 <label>Odometer miles<input type="number" id="vMiles" inputmode="numeric"></label>
 <label>Tire condition<select id="vTires"><option value="new">New</option><option value="good">Good</option><option value="worn">Worn</option><option value="bald">Near bald</option></select></label>
 <label>Tire type<select id="vTireType"><option value="highway">Highway or all season</option><option value="at">All terrain</option><option value="mt">Mud terrain</option><option value="ltr">Commercial or LT</option><option value="winter">Winter</option></select></label>
+<label class="chk"><input type="checkbox" id="vRental"> Rental or borrowed</label>
 <label>Suspension<select id="vSusp"><option value="stock">Stock</option><option value="lifted">Lifted</option><option value="lowered">Lowered</option><option value="air">Air ride</option><option value="worn">Worn shocks</option></select></label>
 </nav>
 
@@ -223,10 +229,17 @@ const TITLES={scope:'Scope',vib:'Vibration',spec:'Spectrum',tele:'Telemetry',roa
 const VTYPES={car:'Car',suv:'SUV',pickup:'Pickup',dually:'Dually',van:'Van',box:'Box truck',semi:'Semi',rv:'RV',other:'Other'};
 const KEY='chassisquiver-v1-cfg',RKEY='chassisquiver-v1-runs';
 const DEF={gain:1,split:12,cyl:4,smooth:3,bump:3,band:1.5,wake:true,gps:true,auto:true,share:true,trim:true,mode:'scope',seenAbout:false,src:'all',lastRoad:'',
- vehicle:{type:'car',make:'',model:'',year:'',miles:'',tires:'good',tiretype:'highway',susp:'stock'}};
+ vehicle:{type:'car',make:'',model:'',year:'',miles:'',tires:'good',tiretype:'highway',susp:'stock'},vehicles:null,vid:''};
+const MAXV=20;
 let CFG=JSON.parse(JSON.stringify(DEF));
 try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s){const v=Object.assign({},DEF.vehicle,s.vehicle||{});Object.assign(CFG,s);CFG.vehicle=v}}catch(e){}
-function saveCfg(){try{localStorage.setItem(KEY,JSON.stringify(CFG))}catch(e){}}
+function newVid(){return 'v'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function blankVehicle(){return Object.assign({id:newVid(),nick:'',rental:false},DEF.vehicle)}
+if(!Array.isArray(CFG.vehicles)||!CFG.vehicles.length){CFG.vehicles=[Object.assign(blankVehicle(),CFG.vehicle,{id:(CFG.vehicle&&CFG.vehicle.id)||newVid()})]}
+CFG.vehicles=CFG.vehicles.slice(0,MAXV).map(v=>Object.assign(blankVehicle(),v));
+function activeV(){let v=CFG.vehicles.find(x=>x.id===CFG.vid);if(!v){v=CFG.vehicles[0];CFG.vid=v.id}return v}
+CFG.vehicle=activeV();
+function saveCfg(){if(CFG.vehicles)CFG.vehicle=activeV();try{localStorage.setItem(KEY,JSON.stringify(CFG))}catch(e){}}
 let RUNS=[];
 try{RUNS=JSON.parse(localStorage.getItem(RKEY)||'[]')||[]}catch(e){RUNS=[]}
 function saveRuns(){try{localStorage.setItem(RKEY,JSON.stringify(RUNS))}catch(e){toast('Phone storage is full, older runs need deleting')}}
@@ -430,7 +443,7 @@ function runIndex(r){
  const f=(r.outside||0)/100;
  return rIndex(f*60*mins*0.5*(r.band||1.5),(r.spm||0)*mins,mins,r.mph);
 }
-function vkey(v){v=v||{};return [v.type,v.make,v.model,v.year,v.tires,v.tiretype,v.susp].map(x=>String(x==null?'':x).toLowerCase().trim()).join('|')}
+function vkey(v){v=v||{};if(v.id)return 'id:'+v.id;return [v.type,v.make,v.model,v.year,v.tires,v.tiretype,v.susp].map(x=>String(x==null?'':x).toLowerCase().trim()).join('|')}
 function median(a){if(!a.length)return null;const q=a.slice().sort((x,y)=>x-y),m=q.length>>1;return q.length%2?q[m]:(q[m-1]+q[m])/2}
 function roadKey(name){return String(name||'Unnamed').toLowerCase()}
 let SC={trip:new Map(),road:new Map(),veh:new Map(),G:1};
@@ -633,14 +646,21 @@ function renderAccount(){
 function setUser(u){
  const was=USER&&USER.id;USER=u||null;renderAccount();
  if(USER&&USER.id!==was){
-  const v=USER.user_metadata&&USER.user_metadata.vehicle;
-  if(v){CFG.vehicle=Object.assign({},DEF.vehicle,v);saveCfg();syncSettings()}else pushVehicle();
+  const md=USER.user_metadata||{};
+  const cloudV=Array.isArray(md.vehicles)?md.vehicles:[];
+  if(cloudV.length){
+   const m=new Map();cloudV.forEach(v=>v&&v.id&&m.set(v.id,Object.assign(blankVehicle(),v)));
+   CFG.vehicles.forEach(v=>{if(!m.has(v.id)&&(v.make||v.model||v.nick||v.year))m.set(v.id,v)});
+   CFG.vehicles=[...m.values()].slice(0,MAXV);if(md.vid&&CFG.vehicles.some(v=>v.id===md.vid))CFG.vid=md.vid;
+   saveCfg();syncSettings();
+  }
+  pushVehicle();
   syncUp();pullCloud(true);
  }
  refreshViews();
 }
 let vehT=0;
-function pushVehicle(){if(!sb||!USER)return;clearTimeout(vehT);vehT=setTimeout(()=>{sb.auth.updateUser({data:{vehicle:CFG.vehicle}}).catch(()=>{})},1500)}
+function pushVehicle(){if(!sb||!USER)return;clearTimeout(vehT);vehT=setTimeout(()=>{sb.auth.updateUser({data:{vehicles:CFG.vehicles,vid:CFG.vid,vehicle:activeV()}}).catch(()=>{})},1500)}
 async function cloudInit(){
  renderAccount();
  if(!sb)return;
@@ -650,7 +670,8 @@ async function cloudInit(){
 }
 
 const OPEN=new Set();
-function vDesc(v){if(!v)return 'Unknown vehicle';const a=[VTYPES[v.type]||'Vehicle'];const mm=[v.year,v.make,v.model].filter(Boolean).join(' ');if(mm)a.push(mm);if(v.miles)a.push(Number(v.miles).toLocaleString()+' mi');if(v.tires)a.push(v.tires+' tires');return a.join(', ')}
+function vName(v){if(!v)return 'Vehicle';return v.nick||[v.year,v.make,v.model].filter(Boolean).join(' ')||VTYPES[v.type]||'Vehicle'}
+function vDesc(v){if(!v)return 'Unknown vehicle';const a=[];if(v.nick)a.push(v.nick);a.push(VTYPES[v.type]||'Vehicle');if(v.rental)a.push('rental');const mm=[v.year,v.make,v.model].filter(Boolean).join(' ');if(mm)a.push(mm);if(v.miles)a.push(Number(v.miles).toLocaleString()+' mi');if(v.tires)a.push(v.tires+' tires');return a.join(', ')}
 function avg(a){return a.length?a.reduce((s,x)=>s+x,0)/a.length:null}
 function syncSeg(){document.querySelectorAll('.srcSeg button').forEach(b=>b.classList.toggle('sel',b.dataset.s===CFG.src))}
 function renderRoads(){
@@ -953,6 +974,7 @@ road:['Road quality',
 '<p>Events: when the trace leaves the band, the app opens an event and keeps it open until the trace has stayed back inside for a quarter second. A short sharp hit like a pothole or expansion joint is a hit. An event lasting longer than about a third of a second is a rough patch. One lasting two seconds or more is a washboard stretch. Tiny brushes past the band that are neither long nor hard are ignored. Each event records where it happened, how long it lasted, its peak, and how far past the band it went in total.</p>'+
 '<p>ROUGH is the roughness index: how far past the band the road pushed per minute, plus a little extra for every event, adjusted for speed because faster driving shakes harder. EVENTS counts events in the run, or in the last minute when not recording.</p>'+
 '<p>SCORE is fully automatic. The first run ever logged on a road scores 5 and becomes that road\'s baseline. Every later run is compared to the baseline: twice as rough as the baseline scores 2.5, half as rough scores 7.5, and so on down to 0 and up to 10. The road\'s own score blends all its runs with the newest counting most, so a road that gets repaved climbs and a road that falls apart drops.</p>'+
+'<p>Your garage holds up to '+MAXV+' vehicles, rentals and borrowed cars included. Pick the one you are driving from the menu or from the box above the trace in Road quality, and every run records that vehicle.</p>'+
 '<p>Vehicles are evened out. Once a vehicle has a few runs, the app learns how much rougher or smoother it rides than everyone else and divides that out, so worn tires on a heavy pickup and a soft luxury sedan can score the same road fairly.</p>'+
 '<p>Auto logging: with the app open, START pressed and GPS on, logging begins by itself once you hold above 15 mph for a few seconds, and ends after a minute and a half stopped. The app looks up the road name every half minute as you drive and splits the trip into one run per road. Stops at lights are left out.</p>'+
 '<p>Manual runs: RECORD RUN and END RUN log one stretch from start to finish, then ask only for the road name.</p>'+
@@ -1006,7 +1028,10 @@ function syncSettings(){
  $('sCyl').value=String(CFG.cyl);$('sSmooth').value=String(CFG.smooth);
  $('sBump').value=CFG.bump;$('oBump').textContent=CFG.bump+' m/s²';
  $('sWake').checked=!!CFG.wake;$('sGps').checked=!!CFG.gps;$('sAuto').checked=!!CFG.auto;$('sShare').checked=!!CFG.share;$('sTrim').checked=!!CFG.trim;
- const v=CFG.vehicle;$('vType').value=v.type;$('vMake').value=v.make;$('vModel').value=v.model;$('vYear').value=v.year;$('vMiles').value=v.miles;$('vTires').value=v.tires;$('vTireType').value=v.tiretype;$('vSusp').value=v.susp;
+ const v=activeV();$('vNick').value=v.nick||'';$('vRental').checked=!!v.rental;$('vType').value=v.type;$('vMake').value=v.make;$('vModel').value=v.model;$('vYear').value=v.year;$('vMiles').value=v.miles;$('vTires').value=v.tires;$('vTireType').value=v.tiretype;$('vSusp').value=v.susp;
+ const opts=CFG.vehicles.map(x=>'<option value="'+esc(x.id)+'">'+esc(vName(x))+(x.rental?' (rental)':'')+'</option>').join('');
+ $('vPick').innerHTML=opts;$('vPick2').innerHTML=opts;$('vPick').value=v.id;$('vPick2').value=v.id;
+ $('vAdd').disabled=CFG.vehicles.length>=MAXV;$('vDel').disabled=CFG.vehicles.length<=1;
 }
 $('sGain').oninput=e=>{CFG.gain=Math.pow(2,+e.target.value);saveCfg();syncSettings()};
 $('sBand').oninput=e=>{CFG.band=+e.target.value;saveCfg();syncSettings()};
@@ -1019,8 +1044,14 @@ $('sGps').onchange=e=>{CFG.gps=e.target.checked;saveCfg();if(!CFG.gps)gpsStop();
 $('sAuto').onchange=e=>{CFG.auto=e.target.checked;saveCfg()};
 $('sShare').onchange=e=>{CFG.share=e.target.checked;saveCfg();toast(CFG.share?'New runs will be shared':'New runs stay private to your account')};
 $('sTrim').onchange=e=>{CFG.trim=e.target.checked;saveCfg()};
-const VF={vType:'type',vMake:'make',vModel:'model',vYear:'year',vMiles:'miles',vTires:'tires',vTireType:'tiretype',vSusp:'susp'};
-for(const id in VF){const el=$(id);const h=()=>{let val=el.value;if(el.type==='text')val=val.slice(0,40);CFG.vehicle[VF[id]]=val;saveCfg();pushVehicle()};el.oninput=h;el.onchange=h}
+const VF={vNick:'nick',vType:'type',vMake:'make',vModel:'model',vYear:'year',vMiles:'miles',vTires:'tires',vTireType:'tiretype',vSusp:'susp'};
+function refreshPick(){const v=activeV(),txt=vName(v)+(v.rental?' (rental)':'');[$('vPick'),$('vPick2')].forEach(sel=>{const o=[...sel.options].find(o=>o.value===v.id);if(o)o.textContent=txt})}
+for(const id in VF){const el=$(id);const h=()=>{let val=el.value;if(el.type==='text')val=val.slice(0,40);activeV()[VF[id]]=val;saveCfg();refreshPick();pushVehicle()};el.oninput=h;el.onchange=h}
+$('vRental').onchange=e=>{activeV().rental=e.target.checked;saveCfg();refreshPick();pushVehicle()};
+function pickVehicle(id){if(!CFG.vehicles.some(v=>v.id===id))return;CFG.vid=id;saveCfg();syncSettings();pushVehicle();toast('Driving '+vName(activeV()))}
+$('vPick').onchange=e=>pickVehicle(e.target.value);$('vPick2').onchange=e=>pickVehicle(e.target.value);
+$('vAdd').onclick=()=>{if(CFG.vehicles.length>=MAXV){toast('Garage is full at '+MAXV+' vehicles');return}const v=blankVehicle();CFG.vehicles.push(v);CFG.vid=v.id;saveCfg();syncSettings();pushVehicle();$('vNick').focus();toast('New vehicle added, fill in its details')};
+$('vDel').onclick=()=>{if(CFG.vehicles.length<=1)return;const v=activeV();if(!confirm('Remove '+vName(v)+'? Runs already recorded with it keep their vehicle details.'))return;CFG.vehicles=CFG.vehicles.filter(x=>x.id!==v.id);CFG.vid=CFG.vehicles[0].id;saveCfg();syncSettings();pushVehicle();toast('Vehicle removed')};
 
 syncSettings();setMode(TITLES[CFG.mode]?CFG.mode:'scope');
 computeScores();cloudInit();
