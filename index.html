@@ -210,7 +210,7 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 <datalist id="roadNames"></datalist>
 
 <script>
-const SB_URL='';
+const SB_URL='https://vogxdikogfaxhwcgajfg.supabase.co';
 const SB_KEY='';
 const SITE='https://chassisquiver.vercel.app/';
 
@@ -506,14 +506,14 @@ function rateRun(id){
   const loc=RUNS.find(x=>x.id===id);if(loc){loc.rating=rating;loc.road=nm;saveRuns()}
   const cl=CLOUD.find(x=>x.id===id);if(cl){cl.rating=rating;cl.road=nm}
   $('modal').classList.remove('on');
-  if(sb&&USER&&(cl||(loc&&loc.synced))){const {error}=await sb.from('runs').update({rating,road:nm}).eq('id',id);if(error)toast('Saved here, cloud update failed')}
+  if(sb&&USER&&(cl||(loc&&loc.synced))){const {error}=await sb.from('chassisquiver_runs').update({rating,road:nm}).eq('id',id);if(error)toast('Saved here, cloud update failed')}
   toast('Rating saved');refreshViews();
  };
 }
 async function deleteRun(id){
  const r=allRuns().find(x=>x.id===id);
  RUNS=RUNS.filter(x=>x.id!==id);saveRuns();
- if(sb&&USER&&r&&(r.synced||r.user_id===USER.id)){const {error}=await sb.from('runs').delete().eq('id',id);if(error)toast('Removed here, cloud delete failed')}
+ if(sb&&USER&&r&&(r.synced||r.user_id===USER.id)){const {error}=await sb.from('chassisquiver_runs').delete().eq('id',id);if(error)toast('Removed here, cloud delete failed')}
  CLOUD=CLOUD.filter(x=>x.id!==id);
  refreshViews();toast('Run deleted');
 }
@@ -538,7 +538,7 @@ async function syncUp(){
  try{
   for(let i=0;i<todo.length;i+=50){
    const batch=todo.slice(i,i+50);
-   const {error}=await sb.from('runs').upsert(batch.map(toRow),{onConflict:'id'});
+   const {error}=await sb.from('chassisquiver_runs').upsert(batch.map(toRow),{onConflict:'id'});
    if(error){toast('Cloud sync failed: '+error.message);break}
    batch.forEach(r=>r.synced=true);saveRuns();
   }
@@ -548,14 +548,14 @@ async function syncUp(){
 async function pullCloud(quiet){
  if(!sb){if(!quiet)toast('Cloud is not connected yet, showing runs on this phone');return}
  try{
-  const {data,error}=await sb.from('runs').select('*').order('at',{ascending:false}).limit(1500);
+  const {data,error}=await sb.from('chassisquiver_runs').select('*').order('at',{ascending:false}).limit(1500);
   if(error)throw error;
   CLOUD=(data||[]).map(fromRow);refreshViews();if(!quiet)toast(CLOUD.length+' runs loaded');
  }catch(e){if(!quiet)toast('Cloud is unreachable')}
 }
 async function fetchRun(id){
  if(!sb)return null;
- try{const {data}=await sb.from('runs').select('*').eq('id',id).maybeSingle();if(data){const r=fromRow(data);if(!CLOUD.some(x=>x.id===r.id))CLOUD.push(r);return r}}catch(e){}
+ try{const {data}=await sb.from('chassisquiver_runs').select('*').eq('id',id).maybeSingle();if(data){const r=fromRow(data);if(!CLOUD.some(x=>x.id===r.id))CLOUD.push(r);return r}}catch(e){}
  return null;
 }
 
@@ -570,7 +570,7 @@ function renderAccount(){
   A.innerHTML='<div class="note">Sign in to sync runs across phones and share road stretches with friends.</div><label>Email<input type="email" id="aEmail" autocomplete="email"></label><label>Password<input type="password" id="aPass" autocomplete="current-password"></label><button class="item primary" id="aIn">Sign in</button><button class="item" id="aUp">Create account</button>';
   const creds=()=>({email:$('aEmail').value.trim(),password:$('aPass').value});
   $('aIn').onclick=async()=>{const c=creds();if(!c.email||!c.password){toast('Enter email and password');return}const {error}=await sb.auth.signInWithPassword(c);if(error)toast(error.message);else toast('Signed in')};
-  $('aUp').onclick=async()=>{const c=creds();if(!c.email||c.password.length<6){toast('Enter an email and a password of at least 6 characters');return}const {data,error}=await sb.auth.signUp(c);if(error)toast(error.message);else if(!data.session)toast('Check your email to confirm the account');else toast('Account created')};
+  $('aUp').onclick=async()=>{const c=creds();if(!c.email||c.password.length<6){toast('Enter an email and a password of at least 6 characters');return}const {data,error}=await sb.auth.signUp(Object.assign(c,{options:{emailRedirectTo:SITE}}));if(error)toast(error.message);else if(!data.session)toast('Check your email to confirm the account');else toast('Account created')};
  }
 }
 function setUser(u){
