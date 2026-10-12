@@ -1,9 +1,0 @@
-{
-  "name": "chassisquiver-api",
-  "version": "1.0.0",
-  "private": true,
-  "main": "chassisquiver-api-v1.js",
-  "scripts": { "start": "node chassisquiver-api-v1.js" },
-  "engines": { "node": ">=18" },
-  "dependencies": { "redis": "4.7.0" }
-}

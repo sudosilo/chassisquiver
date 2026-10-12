@@ -1,0 +1,11 @@
+project_id = "chassisquiver"
+
+[auth]
+enabled = true
+site_url = "https://chassisquiver.vercel.app"
+additional_redirect_urls = ["https://chassisquiver.vercel.app", "https://chassisquiver.vercel.app/"]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
