@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="chassisquiver-v1-config.js"></script>
 <style>
 :root{--bg:#f4f1ea;--panel:#fffdf8;--ink:#1d2430;--mute:#6b7280;--line:#d9d3c7;--accent:#d9822b;--x:#d64545;--y:#2f9e6b;--z:#3a6fd8;--road:#c0702a;--eng:#7b4fc9;--body:#2f9e6b;--bad:#c93b3b;--good:#2f9e6b}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -210,8 +211,9 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 <datalist id="roadNames"></datalist>
 
 <script>
-const SB_URL='https://vogxdikogfaxhwcgajfg.supabase.co';
-const SB_KEY='';
+const CQC=window.CHASSISQUIVER_CONFIG||{};
+const SB_URL=CQC.url||'https://vogxdikogfaxhwcgajfg.supabase.co';
+const SB_KEY=CQC.key||'';
 const SITE='https://chassisquiver.vercel.app/';
 
 const DEG=180/Math.PI;
