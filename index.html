@@ -137,8 +137,8 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 </section>
 <section class="view" id="v-road">
 <div class="readouts">
-<div class="ro"><span>OUTSIDE</span><b id="rOut">0.0%</b></div>
-<div class="ro"><span>SPIKES</span><b id="rSpk">0</b></div>
+<div class="ro"><span>EVENTS</span><b id="rOut">0</b></div>
+<div class="ro"><span>ROUGH</span><b id="rSpk">0.00</b></div>
 <div class="ro"><span>SCORE</span><b id="rScore" style="color:var(--accent)">none</b></div>
 <div class="ro"><span>MPH</span><b id="rMph">none</b></div>
 </div>
@@ -246,9 +246,9 @@ const S={on:false,rate:60,lastT:0,samples:0,
  hist:{road:new Float32Array(HN),eng:new Float32Array(HN),body:new Float32Array(HN),i:0},
  prevAcc:null,accUnw:0,steer:0,steerZero:0,gyroScale:0,gyroSeen:false,votes:{},calA:0,calG:0,calT:0,
  pitchLP:0,pitchZero:0,raw:[0,0,0],spec:null,peak:null,
- liveOut:0,spikeT:[],lastSpike:0,
+ liveOut:0,spikeT:[],lastSpike:0,evt:{on:false,t0:0,last:0,peak:0,ex:0},liveEv:[],
  gps:{watch:null,speed:null,pos:null,acc:null,fixT:0,prev:null,prevT:0},
- iv:{n:0,out:0,spikes:0,mt:0,sum2:0},
+ iv:{n:0,out:0,spikes:0,mt:0,sum2:0,ev:0,ex:0},
  rec:null,curRoad:'',geoT:0,geoBusy:false,autoFast:0,autoSlow:0,
  trip:{t:0,sum:0,n:0,peak:0,bumps:0,lastBump:0}};
 let wakeLock=null;
@@ -292,6 +292,10 @@ function onMotion(e){
  let spike=false;
  if(hp>CFG.bump&&t-S.lastSpike>300){spike=true;S.lastSpike=t;S.spikeT.push(t)}
  while(S.spikeT.length&&t-S.spikeT[0]>60000)S.spikeT.shift();
+ const E=S.evt;
+ if(out){if(!E.on){E.on=true;E.t0=t;E.peak=0;E.ex=0}E.last=t;if(hp>E.peak)E.peak=hp;E.ex+=(hp-CFG.band)*dt}
+ else if(E.on&&t-E.last>250){E.on=false;closeEvent(E,t)}
+ while(S.liveEv.length&&t-S.liveEv[0].t>60000)S.liveEv.shift();
  const R=S.rec;
  if(R){
   R.wall+=dt;
@@ -301,6 +305,17 @@ function onMotion(e){
    if(hp>R.peak)R.peak=hp;
    const iv=S.iv;iv.n++;iv.out+=out;iv.sum2+=hp*hp;iv.mt+=dt;if(spike)iv.spikes++;
   }
+ }
+}
+function closeEvent(E,t){
+ const dur=(E.last-E.t0)/1000;
+ if(dur<0.15&&E.peak<=CFG.bump)return;
+ const kind=dur>=2?2:dur>=0.3?1:0;
+ S.liveEv.push({t,ex:E.ex,kind});
+ const R=S.rec;
+ if(R&&moving()){
+  R.ev++;R.ex+=E.ex;R.kinds[kind]++;S.iv.ev++;S.iv.ex+=E.ex;
+  if(S.gps.pos&&gpsFresh()&&R.events.length<800)R.events.push([+S.gps.pos[0].toFixed(5),+S.gps.pos[1].toFixed(5),+dur.toFixed(2),+E.peak.toFixed(2),+E.ex.toFixed(3),kind,Date.now()]);
  }
 }
 function gpsFresh(){return S.gps.fixT&&Date.now()-S.gps.fixT<6000}
@@ -372,9 +387,9 @@ function onFix(p){
   const d=R.last?hav(R.last,pt):0;
   if(!R.last||d>=40||now-R.lastT>=10000){
    const iv=S.iv;
-   R.pts.push({la:+pt[0].toFixed(5),lo:+pt[1].toFixed(5),n:iv.n,out:iv.out,spikes:iv.spikes,mt:+iv.mt.toFixed(2),sum2:+iv.sum2.toFixed(2),mph:sp==null?null:+(sp*2.23694).toFixed(1),road:S.curRoad,d:d<1500?d:0});
+   R.pts.push({la:+pt[0].toFixed(5),lo:+pt[1].toFixed(5),n:iv.n,out:iv.out,spikes:iv.spikes,mt:+iv.mt.toFixed(2),sum2:+iv.sum2.toFixed(2),ev:iv.ev,ex:+iv.ex.toFixed(3),t:Date.now(),mph:sp==null?null:+(sp*2.23694).toFixed(1),road:S.curRoad,d:d<1500?d:0});
    if(d<1500)R.dist+=d;
-   S.iv={n:0,out:0,spikes:0,mt:0,sum2:0};R.last=pt;R.lastT=now;
+   S.iv={n:0,out:0,spikes:0,mt:0,sum2:0,ev:0,ex:0};R.last=pt;R.lastT=now;
   }
   if(sp!=null){R.spSum+=sp;R.spN++}
  }
@@ -407,12 +422,45 @@ setInterval(()=>{
  }
 },1000);
 
-function scoreOf(f,spm){return Math.max(0,Math.min(10,10*(1-Math.min(1,f*4+spm/30))))}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function rIndex(ex,ev,mins,mph){if(!(mins>0))return null;const base=ex/mins+0.3*ev/mins;const sf=mph?clamp(Math.sqrt(mph/45),0.5,1.6):1;return +(base/sf).toFixed(4)}
+function runIndex(r){
+ if(typeof r.rindex==='number')return r.rindex;
+ const mins=(r.secs||0)/60;if(!mins)return null;
+ const f=(r.outside||0)/100;
+ return rIndex(f*60*mins*0.5*(r.band||1.5),(r.spm||0)*mins,mins,r.mph);
+}
+function vkey(v){v=v||{};return [v.type,v.make,v.model,v.year,v.tires,v.tiretype,v.susp].map(x=>String(x==null?'':x).toLowerCase().trim()).join('|')}
+function median(a){if(!a.length)return null;const q=a.slice().sort((x,y)=>x-y),m=q.length>>1;return q.length%2?q[m]:(q[m-1]+q[m])/2}
+function roadKey(name){return String(name||'Unnamed').toLowerCase()}
+let SC={trip:new Map(),road:new Map(),veh:new Map(),G:1};
+function computeScores(){
+ const items=allRuns().map(r=>({r,R:runIndex(r)})).filter(x=>x.R!=null);
+ const G=median(items.map(x=>x.R).filter(v=>v>0))||1;
+ const byV={};items.forEach(x=>{const k=vkey(x.r.vehicle);(byV[k]=byV[k]||[]).push(x.R)});
+ const veh=new Map();for(const k in byV){const m=median(byV[k]);veh.set(k,byV[k].length>=3&&m>0?clamp(m/G,0.3,3):1)}
+ const roads={};
+ items.forEach(x=>{x.Rv=Math.max(0.02,x.R/(veh.get(vkey(x.r.vehicle))||1));const k=roadKey(x.r.road);(roads[k]=roads[k]||[]).push(x)});
+ const trip=new Map(),road=new Map();
+ for(const k in roads){
+  const L=roads[k].sort((a,b)=>a.r.at-b.r.at),anchor=L[0].Rv;
+  L.forEach((x,i)=>{const sc=i===0?5:clamp(5-2.5*Math.log2(x.Rv/anchor),0,10);trip.set(x.r.id,{score:+sc.toFixed(1),prev:i?trip.get(L[i-1].r.id).score:null,first:i===0,R:x.R,Rv:x.Rv})});
+  let ws=0,ss=0;L.forEach((x,i)=>{const w=Math.pow(0.7,L.length-1-i);ws+=w;ss+=w*trip.get(x.r.id).score});
+  road.set(k,{score:+(ss/ws).toFixed(1),anchor,n:L.length,last:trip.get(L[L.length-1].r.id).score,prev:L.length>1?trip.get(L[L.length-2].r.id).score:null});
+ }
+ SC={trip,road,veh,G};
+}
+function tripScore(r){const t=SC.trip.get(r.id);return t?t.score:5}
+function vehFactor(v){return SC.veh.get(vkey(v))||1}
+function relScore(R,v,road){const rd=SC.road.get(roadKey(road));if(R==null)return null;if(!rd)return 5;return +clamp(5-2.5*Math.log2(Math.max(0.02,R/vehFactor(v))/rd.anchor),0,10).toFixed(1)}
+function trendText(r){const t=SC.trip.get(r.id);if(!t)return '';if(t.first)return 'first run on this road, sets the baseline';if(t.prev==null)return '';const d=t.score-t.prev;return Math.abs(d)<0.3?'about the same as the run before':d>0?'smoother than the run before':'rougher than the run before'}
+function kindText(k){k=k||[0,0,0];const a=[];if(k[0])a.push(k[0]+' hit'+(k[0]===1?'':'s'));if(k[1])a.push(k[1]+' rough patch'+(k[1]===1?'':'es'));if(k[2])a.push(k[2]+' washboard stretch'+(k[2]===1?'':'es'));return a.length?a.join(', '):'no events'}
+function finalizeScores(runs){computeScores();runs.forEach(r=>{r.score=tripScore(r)});saveRuns()}
 function startRun(auto){
  if(S.rec)return;
  if(!S.on){toast('Press START first');return}
- S.rec={auto:!!auto,began:Date.now(),n:0,out:0,sum2:0,t:0,wall:0,spikes:0,peak:0,hist:new Uint32Array(400),dist:0,spSum:0,spN:0,pts:[],last:null,lastT:0};
- S.iv={n:0,out:0,spikes:0,mt:0,sum2:0};S.geoT=0;S.autoSlow=0;
+ S.rec={auto:!!auto,began:Date.now(),n:0,out:0,sum2:0,t:0,wall:0,spikes:0,peak:0,hist:new Uint32Array(400),dist:0,spSum:0,spN:0,pts:[],last:null,lastT:0,ev:0,ex:0,kinds:[0,0,0],events:[]};
+ S.iv={n:0,out:0,spikes:0,mt:0,sum2:0,ev:0,ex:0};S.geoT=0;S.autoSlow=0;
  gpsStart();
  $('bRec').textContent='END RUN';$('bRec').classList.add('recon');
  toast(auto?'Auto logging started':'Recording run');
@@ -421,17 +469,19 @@ function toggleRun(){if(S.rec)endRun();else startRun(false)}
 function p95(h,n){if(!n)return 0;let c=0,lim=n*0.95;for(let i=0;i<h.length;i++){c+=h[i];if(c>=lim)return i/10}return h.length/10}
 function liveStats(R){
  const f=R.n?R.out/R.n:0,mins=R.t/60,spm=mins>0?R.spikes/mins:0;
- return{score:+scoreOf(f,spm).toFixed(1),outside:+(f*100).toFixed(2),spm:+spm.toFixed(2),spikes:R.spikes,
+ const mph=R.spN?+(R.spSum/R.spN*2.23694).toFixed(1):null,miles=+(R.dist/1609.34).toFixed(2);
+ return{score:5,outside:+(f*100).toFixed(2),spm:+spm.toFixed(2),spikes:R.spikes,
   rms:+Math.sqrt(R.n?R.sum2/R.n:0).toFixed(3),p95:+p95(R.hist,R.n).toFixed(2),peak:+R.peak.toFixed(2),
-  secs:Math.round(R.t),miles:+(R.dist/1609.34).toFixed(2),mph:R.spN?+(R.spSum/R.spN*2.23694).toFixed(1):null}
+  secs:Math.round(R.t),miles,mph,events:R.ev,excess:+R.ex.toFixed(3),kinds:R.kinds.slice(),rindex:rIndex(R.ex,R.ev,R.t/60,mph),epm:miles>0.05?+(R.ev/miles).toFixed(2):null,evlist:R.events.slice()}
 }
 function ptStats(pts){
- let n=0,out=0,spikes=0,mt=0,sum2=0,dist=0,ms=0,mn=0;
- pts.forEach((p,i)=>{n+=p.n;out+=p.out;spikes+=p.spikes;mt+=p.mt;sum2+=p.sum2;if(i)dist+=p.d;if(p.mph!=null){ms+=p.mph;mn++}});
+ let n=0,out=0,spikes=0,mt=0,sum2=0,dist=0,ms=0,mn=0,ev=0,ex=0;
+ pts.forEach((p,i)=>{n+=p.n;out+=p.out;spikes+=p.spikes;mt+=p.mt;sum2+=p.sum2;ev+=p.ev||0;ex+=p.ex||0;if(i)dist+=p.d;if(p.mph!=null){ms+=p.mph;mn++}});
  const f=n?out/n:0,spm=mt>0?spikes/(mt/60):0;
- return{score:+scoreOf(f,spm).toFixed(1),outside:+(f*100).toFixed(2),spm:+spm.toFixed(2),spikes,rms:+Math.sqrt(n?sum2/n:0).toFixed(3),p95:null,peak:null,secs:Math.round(mt),miles:+(dist/1609.34).toFixed(2),mph:mn?+(ms/mn).toFixed(1):null,_n:n}
+ const mph=mn?+(ms/mn).toFixed(1):null,miles=+(dist/1609.34).toFixed(2);
+ return{score:5,outside:+(f*100).toFixed(2),spm:+spm.toFixed(2),spikes,rms:+Math.sqrt(n?sum2/n:0).toFixed(3),p95:null,peak:null,secs:Math.round(mt),miles,mph,events:ev,excess:+ex.toFixed(3),rindex:rIndex(ex,ev,mt/60,mph),epm:miles>0.05?+(ev/miles).toFixed(2):null,_n:n}
 }
-function packPath(pts){return pts.map(p=>[p.la,p.lo,p.n,p.out,p.spikes,p.mt,p.sum2,p.mph])}
+function packPath(pts){return pts.map(p=>[p.la,p.lo,p.n,p.out,p.spikes,p.mt,p.sum2,p.mph,p.ev||0,p.ex||0])}
 function baseRun(extra){return Object.assign({id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),at:Date.now(),rating:null,band:CFG.band,bump:CFG.bump,rate:Math.round(S.rate),vehicle:Object.assign({},CFG.vehicle),synced:false},extra)}
 function fillRoads(pts){let first='';for(const p of pts)if(p.road){first=p.road;break}let cur=first;for(const p of pts){if(p.road)cur=p.road;else p.road=cur}}
 function mainRoad(pts){const m={};for(const p of pts)if(p.road)m[p.road]=(m[p.road]||0)+p.d+1;let best='',bv=0;for(const k in m)if(m[k]>bv){bv=m[k];best=k}return best}
@@ -439,8 +489,8 @@ function endRun(){
  const R=S.rec;S.rec=null;
  $('bRec').textContent='RECORD RUN';$('bRec').classList.remove('recon');
  if(!R)return;
- if(S.iv.n&&R.pts.length&&S.gps.pos){const iv=S.iv,pt=S.gps.pos,d=R.last?hav(R.last,pt):0;R.pts.push({la:+pt[0].toFixed(5),lo:+pt[1].toFixed(5),n:iv.n,out:iv.out,spikes:iv.spikes,mt:+iv.mt.toFixed(2),sum2:+iv.sum2.toFixed(2),mph:null,road:S.curRoad,d:d<1500?d:0});if(d<1500)R.dist+=d}
- S.iv={n:0,out:0,spikes:0,mt:0,sum2:0};
+ if(S.iv.n&&R.pts.length&&S.gps.pos){const iv=S.iv,pt=S.gps.pos,d=R.last?hav(R.last,pt):0;R.pts.push({la:+pt[0].toFixed(5),lo:+pt[1].toFixed(5),n:iv.n,out:iv.out,spikes:iv.spikes,mt:+iv.mt.toFixed(2),sum2:+iv.sum2.toFixed(2),ev:iv.ev,ex:+iv.ex.toFixed(3),t:Date.now(),mph:null,road:S.curRoad,d:d<1500?d:0});if(d<1500)R.dist+=d}
+ S.iv={n:0,out:0,spikes:0,mt:0,sum2:0,ev:0,ex:0};
  fillRoads(R.pts);
  if(R.auto){saveAuto(R);return}
  if(R.t<10){toast('Run too short to score');return}
@@ -455,13 +505,17 @@ function saveAuto(R){
  let merged=[];
  for(const c of chunks){if(merged.length&&len(c)<400){merged[merged.length-1].pts.push(...c.pts)}else merged.push(c)}
  if(merged.length>1&&len(merged[0])<400){merged[1].pts=merged[0].pts.concat(merged[1].pts);merged.shift()}
- let saved=0;
+ let saved=0;const newRuns=[];
  for(let i=0;i<merged.length;i++){
   const c=merged[i],cp=i>0?[merged[i-1].pts[merged[i-1].pts.length-1]].concat(c.pts):c.pts;
   const st=ptStats(c.pts);if(st.secs<20||!st._n)continue;delete st._n;
-  RUNS.push(baseRun(Object.assign({at:R.began,road:c.road||'Unnamed road',auto:true,path:packPath(cp)},st)));saved++;
+  const t0=i>0?merged[i-1].pts[merged[i-1].pts.length-1].t:0,t1=i<merged.length-1?c.pts[c.pts.length-1].t:Infinity;
+  st.evlist=R.events.filter(e=>e[6]>t0&&e[6]<=t1);
+  const k=[0,0,0];st.evlist.forEach(e=>k[e[5]]++);st.kinds=k;
+  const run=baseRun(Object.assign({at:R.began+i,road:c.road||'Unnamed road',auto:true,path:packPath(cp)},st));
+  RUNS.push(run);newRuns.push(run);saved++;
  }
- saveRuns();
+ finalizeScores(newRuns);
  toast(saved?'Logged '+saved+' road stretch'+(saved===1?'':'es'):'Auto log too short to keep');
  syncUp();refreshViews();
 }
@@ -473,43 +527,41 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;',
 function fmtTime(s){s=Math.floor(s);const m=Math.floor(s/60),ss=s%60;return m+':'+(ss<10?'0':'')+ss}
 function knownRoads(){const names=[...new Set(allRuns().map(r=>r.road).filter(Boolean))].sort();$('roadNames').innerHTML=names.map(n=>'<option value="'+esc(n)+'">').join('')}
 function showSave(run,guess){
- const p=pct(run.score,allRuns().map(r=>r.score));
  knownRoads();
+ const preview=()=>{const nm=$('svRoad')?$('svRoad').value.trim():guess;return relScore(run.rindex,run.vehicle,nm)};
  $('mTitle').textContent='Run finished';
- $('mBody').innerHTML='<div class="big">'+run.score.toFixed(1)+'<small> out of 10 measured</small></div>'+
- '<p>'+(p==null?'First run on record, so there is nothing to rank it against yet.':'Smoother than '+p+'% of the runs on record.')+'</p>'+
- '<p>Outside the band '+run.outside.toFixed(1)+'% of the time, '+run.spikes+' spikes ('+run.spm.toFixed(1)+' per minute), roughness '+run.rms.toFixed(2)+' m/s², scored over '+fmtTime(run.secs)+' of moving time'+(run.miles?' and '+run.miles+' miles':'')+(run.mph?' at '+run.mph+' mph average':'')+'.</p>'+
- '<div class="mrow"><label>Road name<input type="text" id="svRoad" list="roadNames" autocomplete="off" value="'+esc(guess||CFG.lastRoad)+'"></label>'+
- '<label>Your rating of this road <output id="svRateO">not rated</output><input type="range" id="svRate" min="-1" max="10" step="1" value="-1"></label></div>'+
+ $('mBody').innerHTML='<div class="big" id="svScore">'+(preview()==null?'5.0':preview().toFixed(1))+'<small> out of 10</small></div>'+
+ '<p id="svNote"></p>'+
+ '<p>'+run.events+' event'+(run.events===1?'':'s')+' ('+kindText(run.kinds)+')'+(run.epm!=null?', '+run.epm+' per mile':'')+'. Roughness index '+(run.rindex==null?'none':run.rindex.toFixed(2))+' over '+fmtTime(run.secs)+' of moving time'+(run.miles?' and '+run.miles+' miles':'')+(run.mph?' at '+run.mph+' mph average':'')+'.</p>'+
+ '<div class="mrow"><label>Road name<input type="text" id="svRoad" list="roadNames" autocomplete="off" value="'+esc(guess||CFG.lastRoad)+'"></label></div>'+
  '<div class="mbtns"><button id="svDrop">DISCARD</button><button id="svSave" class="primary">SAVE RUN</button></div>';
+ const upd=()=>{const nm=$('svRoad').value.trim(),rd=SC.road.get(roadKey(nm)),sc=preview();$('svScore').innerHTML=(sc==null?'5.0':sc.toFixed(1))+'<small> out of 10</small>';$('svNote').textContent=rd?'Scored against '+rd.n+' earlier run'+(rd.n===1?'':'s')+' on this road, which sits at '+rd.score.toFixed(1)+'.':'First run on this road, so it sets the baseline at 5.'};
+ computeScores();upd();$('svRoad').oninput=upd;
  $('modal').classList.add('on');
- $('svRate').oninput=e=>{const v=+e.target.value;$('svRateO').textContent=v<0?'not rated':v+' out of 10'};
  $('svDrop').onclick=()=>{$('modal').classList.remove('on');toast('Run discarded')};
  $('svSave').onclick=()=>{
   const nm=$('svRoad').value.trim().replace(/\s+/g,' ').slice(0,80);
   if(!nm){toast('Give the road a name first');return}
-  const rv=+$('svRate').value;run.road=nm;run.rating=rv<0?null:rv;
-  CFG.lastRoad=nm;saveCfg();RUNS.push(run);saveRuns();$('modal').classList.remove('on');
-  toast('Run saved');syncUp();refreshViews();
+  run.road=nm;run.rating=null;
+  CFG.lastRoad=nm;saveCfg();RUNS.push(run);finalizeScores([run]);$('modal').classList.remove('on');
+  toast('Run saved at '+run.score.toFixed(1));syncUp();refreshViews();
  };
 }
-function rateRun(id){
+function renameRun(id){
  const r=allRuns().find(x=>x.id===id);if(!r)return;
- const cur=typeof r.rating==='number'?r.rating:-1;
- $('mTitle').textContent='Rate '+r.road;
- $('mBody').innerHTML='<p>Measured '+r.score.toFixed(1)+' out of 10 on '+new Date(r.at).toLocaleDateString()+'. How did it feel from the driver seat?</p>'+
- '<div class="mrow"><label>Road name<input type="text" id="rtRoad" list="roadNames" autocomplete="off" value="'+esc(r.road)+'"></label><label>Your rating <output id="rtO">'+(cur<0?'not rated':cur+' out of 10')+'</output><input type="range" id="rtR" min="-1" max="10" step="1" value="'+cur+'"></label></div>'+
+ $('mTitle').textContent='Rename road';
+ $('mBody').innerHTML='<p>Runs with the same road name are scored against each other. Fix the name if the automatic lookup got it wrong.</p>'+
+ '<div class="mrow"><label>Road name<input type="text" id="rtRoad" list="roadNames" autocomplete="off" value="'+esc(r.road)+'"></label></div>'+
  '<div class="mbtns"><button id="rtCancel">CANCEL</button><button id="rtSave" class="primary">SAVE</button></div>';
  knownRoads();$('modal').classList.add('on');
- $('rtR').oninput=e=>{const v=+e.target.value;$('rtO').textContent=v<0?'not rated':v+' out of 10'};
  $('rtCancel').onclick=()=>$('modal').classList.remove('on');
  $('rtSave').onclick=async()=>{
-  const v=+$('rtR').value,nm=$('rtRoad').value.trim().replace(/\s+/g,' ').slice(0,80)||r.road,rating=v<0?null:v;
-  const loc=RUNS.find(x=>x.id===id);if(loc){loc.rating=rating;loc.road=nm;saveRuns()}
-  const cl=CLOUD.find(x=>x.id===id);if(cl){cl.rating=rating;cl.road=nm}
+  const nm=$('rtRoad').value.trim().replace(/\s+/g,' ').slice(0,80)||r.road;
+  const loc=RUNS.find(x=>x.id===id);if(loc){loc.road=nm;saveRuns()}
+  const cl=CLOUD.find(x=>x.id===id);if(cl)cl.road=nm;
   $('modal').classList.remove('on');
-  if(sb&&USER&&(cl||(loc&&loc.synced))){const {error}=await sb.from('chassisquiver_runs').update({rating,road:nm}).eq('id',id);if(error)toast('Saved here, cloud update failed')}
-  toast('Rating saved');refreshViews();
+  if(sb&&USER&&(cl||(loc&&loc.synced))){const {error}=await sb.from('chassisquiver_runs').update({road:nm}).eq('id',id);if(error)toast('Saved here, cloud update failed')}
+  toast('Road renamed');refreshViews();
  };
 }
 async function deleteRun(id){
@@ -528,10 +580,13 @@ function trimPath(path){
  return out.length>1?out:null;
 }
 function toRow(r){
- return{id:r.id,road:r.road,at:new Date(r.at).toISOString(),auto:!!r.auto,score:r.score,rating:r.rating,outside:r.outside,spm:r.spm,spikes:r.spikes,rms:r.rms,p95:r.p95,peak:r.peak,secs:r.secs,miles:r.miles,mph:r.mph,band:r.band,bump:r.bump,rate:r.rate,vehicle:r.vehicle||{},
+ const trim=CFG.share&&CFG.trim&&r.path&&r.path.length>1;
+ const ends=trim?[r.path[0],r.path[r.path.length-1]]:null;
+ const evl=(r.evlist||[]).filter(e=>!ends||(hav(ends[0],e)>320&&hav(ends[1],e)>320)).map(e=>e.slice(0,6));
+ return{id:r.id,road:r.road,at:new Date(r.at).toISOString(),auto:!!r.auto,score:r.score,rating:null,metrics:{events:r.events||0,excess:r.excess||0,rindex:r.rindex==null?null:r.rindex,epm:r.epm==null?null:r.epm,kinds:r.kinds||null,evlist:evl},outside:r.outside,spm:r.spm,spikes:r.spikes,rms:r.rms,p95:r.p95,peak:r.peak,secs:r.secs,miles:r.miles,mph:r.mph,band:r.band,bump:r.bump,rate:r.rate,vehicle:r.vehicle||{},
   path:CFG.share&&CFG.trim?trimPath(r.path):(r.path||null),shared:!!CFG.share}
 }
-function fromRow(x){return Object.assign({},x,{at:Date.parse(x.at)})}
+function fromRow(x){return Object.assign({},x,x.metrics||{},{at:Date.parse(x.at)})}
 let syncing=false;
 async function syncUp(){
  if(!sb||!USER||syncing)return;
@@ -599,30 +654,30 @@ function vDesc(v){if(!v)return 'Unknown vehicle';const a=[VTYPES[v.type]||'Vehic
 function avg(a){return a.length?a.reduce((s,x)=>s+x,0)/a.length:null}
 function syncSeg(){document.querySelectorAll('.srcSeg button').forEach(b=>b.classList.toggle('sel',b.dataset.s===CFG.src))}
 function renderRoads(){
- syncSeg();
+ syncSeg();computeScores();
  const src=srcRuns(),L=$('roadList');
  if(!src.length){L.innerHTML='<div class="empty">'+(CFG.src==='pool'&&!sb?'The shared cloud is not connected yet.':'No runs yet. Press START and drive with auto logging on, or open Road quality and use RECORD RUN and END RUN.')+'</div>';return}
  const groups=new Map();
- for(const r of src){const k=(r.road||'Unnamed').toLowerCase();if(!groups.has(k))groups.set(k,{name:r.road||'Unnamed',runs:[]});groups.get(k).runs.push(r)}
- const roads=[...groups.values()].map(g=>{const rt=g.runs.map(r=>r.rating).filter(x=>typeof x==='number');return Object.assign(g,{score:avg(g.runs.map(r=>r.score)),rating:avg(rt),nr:rt.length})});
- const roadScores=roads.map(r=>r.score);
+ for(const r of src){const k=roadKey(r.road);if(!groups.has(k))groups.set(k,{name:r.road||'Unnamed',runs:[]});groups.get(k).runs.push(r)}
+ const roads=[...groups.entries()].map(([k,g])=>{const rd=SC.road.get(k);return Object.assign(g,{k,score:rd?rd.score:5,rd})});
  roads.sort((a,b)=>b.score-a.score);
  L.innerHTML=roads.map(g=>{
-  const k=g.name.toLowerCase(),p=roads.length>1?pct(g.score,roadScores):null,people=new Set(g.runs.map(r=>r.user_id||'me')).size;
-  let h='<div class="rd"><div class="rdh" data-k="'+esc(k)+'"><div class="sc">'+g.score.toFixed(1)+'</div><div class="nm"><b>'+esc(g.name)+'</b><span>'+g.runs.length+' run'+(g.runs.length===1?'':'s')+' from '+people+' driver'+(people===1?'':'s')+(p!=null?', smoother than '+p+'% of roads':'')+(g.rating!=null?', felt '+g.rating.toFixed(1):'')+'</span></div></div>';
+  const k=g.k,rd=g.rd,people=new Set(g.runs.map(r=>r.user_id||'me')).size;
+  const trend=rd&&rd.prev!=null?(Math.abs(rd.last-rd.prev)<0.3?', holding steady':rd.last>rd.prev?', getting smoother':', getting rougher'):'';
+  const epms=g.runs.map(r=>r.epm).filter(x=>typeof x==='number');
+  let h='<div class="rd"><div class="rdh" data-k="'+esc(k)+'"><div class="sc" style="color:'+scoreColor(g.score)+'">'+g.score.toFixed(1)+'</div><div class="nm"><b>'+esc(g.name)+'</b><span>'+g.runs.length+' run'+(g.runs.length===1?'':'s')+' from '+people+' driver'+(people===1?'':'s')+trend+(epms.length?', '+avg(epms).toFixed(1)+' events per mile':'')+'</span></div></div>';
   if(OPEN.has(k)){
-   const byType={};for(const r of g.runs){const t=(r.vehicle&&r.vehicle.type)||'other';(byType[t]=byType[t]||[]).push(r.score)}
+   const byType={};for(const r of g.runs){const t=(r.vehicle&&r.vehicle.type)||'other';(byType[t]=byType[t]||[]).push(tripScore(r))}
    h+='<div class="rdb"><div>By vehicle type: '+Object.keys(byType).map(t=>(VTYPES[t]||t)+' '+avg(byType[t]).toFixed(1)+' over '+byType[t].length).join(', ')+'</div>';
-   if(g.rating!=null)h+='<div>Measured '+g.score.toFixed(1)+' against a felt rating of '+g.rating.toFixed(1)+' from '+g.nr+' rated run'+(g.nr===1?'':'s')+'.</div>';
-   h+=g.runs.slice().sort((a,b)=>b.at-a.at).map(r=>{const mine=isMine(r);
-    return '<div class="run"><b>'+r.score.toFixed(1)+'</b>'+(typeof r.rating==='number'?' felt '+r.rating:'')+'  '+new Date(r.at).toLocaleDateString()+(r.auto?'  auto':'')+'<br>outside '+Number(r.outside).toFixed(1)+'%, '+r.spikes+' spikes'+(r.mph?', '+r.mph+' mph':'')+(r.miles?', '+r.miles+' mi':'')+'<br><span style="color:var(--mute)">'+esc(vDesc(r.vehicle))+(mine?'':'  (shared)')+'</span>'+
-    '<div class="rbtns">'+(r.path&&r.path.length>1?'<button data-map="'+esc(r.id)+'">MAP</button>':'')+(mine?'<button data-rate="'+esc(r.id)+'">'+(typeof r.rating==='number'?'EDIT':'RATE')+'</button><button class="del" data-del="'+esc(r.id)+'">DELETE</button>':'')+'</div></div>'}).join('');
+   h+=g.runs.slice().sort((a,b)=>b.at-a.at).map(r=>{const mine=isMine(r),ts=tripScore(r);
+    return '<div class="run"><b style="color:'+scoreColor(ts)+'">'+ts.toFixed(1)+'</b>  '+new Date(r.at).toLocaleDateString()+(r.auto?'  auto':'')+'<br>'+esc(trendText(r))+'<br>'+(typeof r.events==='number'?r.events+' events ('+esc(kindText(r.kinds))+')':'recorded before event logging')+(r.mph?', '+r.mph+' mph':'')+(r.miles?', '+r.miles+' mi':'')+'<br><span style="color:var(--mute)">'+esc(vDesc(r.vehicle))+(mine?'':'  (shared)')+'</span>'+
+    '<div class="rbtns">'+(r.path&&r.path.length>1?'<button data-map="'+esc(r.id)+'">MAP</button>':'')+(mine?'<button data-ren="'+esc(r.id)+'">RENAME</button><button class="del" data-del="'+esc(r.id)+'">DELETE</button>':'')+'</div></div>'}).join('');
    h+='</div>';
   }
   return h+'</div>'}).join('');
  L.querySelectorAll('.rdh').forEach(el=>el.onclick=()=>{const k=el.dataset.k;OPEN.has(k)?OPEN.delete(k):OPEN.add(k);renderRoads()});
  L.querySelectorAll('[data-del]').forEach(el=>el.onclick=()=>{if(confirm('Delete this run?'))deleteRun(el.dataset.del)});
- L.querySelectorAll('[data-rate]').forEach(el=>el.onclick=()=>rateRun(el.dataset.rate));
+ L.querySelectorAll('[data-ren]').forEach(el=>el.onclick=()=>renameRun(el.dataset.ren));
  L.querySelectorAll('[data-map]').forEach(el=>el.onclick=()=>{setMode('map');setTimeout(()=>focusRun(el.dataset.map),60)});
 }
 function exportRuns(){
@@ -645,30 +700,33 @@ function ensureMap(){
  LAYER=L.layerGroup().addTo(MAP);
  MAP.setView([39.5,-98.35],4);
  MAP.getContainer().addEventListener('click',ev=>{
-  const s=ev.target.closest('[data-share]'),r=ev.target.closest('[data-prate]');
-  if(s)shareRun(s.dataset.share);if(r){MAP.closePopup();rateRun(r.dataset.prate)}
+  const s=ev.target.closest('[data-share]'),r=ev.target.closest('[data-pren]');
+  if(s)shareRun(s.dataset.share);if(r){MAP.closePopup();renameRun(r.dataset.pren)}
  });
  return true;
 }
 function popupHtml(r){
- const mine=isMine(r);
- return '<b class="ps">'+r.score.toFixed(1)+'</b> / 10 measured'+(typeof r.rating==='number'?', felt '+r.rating:'')+'<br><b>'+esc(r.road)+'</b><br>'+new Date(r.at).toLocaleDateString()+(r.mph?', '+r.mph+' mph':'')+(r.miles?', '+r.miles+' mi':'')+'<br>outside '+Number(r.outside).toFixed(1)+'%, '+r.spikes+' spikes<br><span style="color:#6b7280">'+esc(vDesc(r.vehicle))+'</span>'+
- '<div class="pbtns"><button class="pbtn" data-share="'+esc(r.id)+'">SHARE</button>'+(mine?'<button class="pbtn" data-prate="'+esc(r.id)+'">'+(typeof r.rating==='number'?'EDIT':'RATE')+'</button>':'')+'</div>';
+ const mine=isMine(r),ts=tripScore(r),rd=SC.road.get(roadKey(r.road));
+ return '<b class="ps" style="color:'+scoreColor(ts)+'">'+ts.toFixed(1)+'</b> / 10 this run'+(rd&&rd.n>1?', road at '+rd.score.toFixed(1):'')+'<br><b>'+esc(r.road)+'</b><br>'+esc(trendText(r))+'<br>'+new Date(r.at).toLocaleDateString()+(r.mph?', '+r.mph+' mph':'')+(r.miles?', '+r.miles+' mi':'')+'<br>'+(typeof r.events==='number'?esc(kindText(r.kinds)):'recorded before event logging')+'<br><span style="color:#6b7280">'+esc(vDesc(r.vehicle))+'</span>'+
+ '<div class="pbtns"><button class="pbtn" data-share="'+esc(r.id)+'">SHARE</button>'+(mine?'<button class="pbtn" data-pren="'+esc(r.id)+'">RENAME</button>':'')+'</div>';
 }
+const EVCOL=['#c93b3b','#d9822b','#7b4fc9'];
 function renderMap(){
- syncSeg();
+ syncSeg();computeScores();
  if(!ensureMap())return;
  LAYER.clearLayers();RUNLAYERS.clear();
  const runs=srcRuns().filter(r=>r.path&&r.path.length>1);
  const all=[];
  for(const r of runs){
-  const P=r.path,grp=L.featureGroup(),W=3;
+  const P=r.path,grp=L.featureGroup(),W=3,band=r.band||1.5;
   for(let i=1;i<P.length;i++){
-   let n=0,out=0,sp=0,mt=0;
-   for(let j=Math.max(1,i-W);j<=Math.min(P.length-1,i+W);j++){n+=P[j][2]||0;out+=P[j][3]||0;sp+=P[j][4]||0;mt+=P[j][5]||0}
-   const sc=n?scoreOf(out/n,mt>0?sp/(mt/60):0):null;
+   let n=0,out=0,mt=0,ev=0,ex=0,sp=0,has=false;
+   for(let j=Math.max(1,i-W);j<=Math.min(P.length-1,i+W);j++){n+=P[j][2]||0;out+=P[j][3]||0;sp+=P[j][4]||0;mt+=P[j][5]||0;if(P[j].length>8){has=true;ev+=P[j][8]||0;ex+=P[j][9]||0}}
+   if(!has){ex=n?(out/n)*mt*0.5*band:0;ev=sp}
+   const sc=n&&mt>0?relScore(rIndex(ex,ev,mt/60,P[i][7]),r.vehicle,r.road):null;
    L.polyline([[P[i-1][0],P[i-1][1]],[P[i][0],P[i][1]]],{color:scoreColor(sc),weight:6,opacity:0.9,lineCap:'round'}).addTo(grp);
   }
+  (r.evlist||[]).forEach(e=>L.circleMarker([e[0],e[1]],{radius:3,color:EVCOL[e[5]]||EVCOL[0],weight:1,fillColor:EVCOL[e[5]]||EVCOL[0],fillOpacity:0.9}).addTo(grp));
   grp.bindPopup(()=>popupHtml(r));
   grp.addTo(LAYER);RUNLAYERS.set(r.id,grp);
   for(const p of P)all.push([p[0],p[1]]);
@@ -702,7 +760,7 @@ async function shareRun(id){
  const inCloud=CLOUD.some(x=>x.id===id&&x.shared!==false)||(r.synced&&CFG.share);
  const base=/^https?:/.test(location.protocol)?location.origin+location.pathname:SITE;
  const url=base+'#run='+id;
- const text=r.road+': '+r.score.toFixed(1)+' out of 10 measured'+(typeof r.rating==='number'?', felt '+r.rating+' out of 10':'')+' on Chassisquiver';
+ computeScores();const text=r.road+': '+tripScore(r).toFixed(1)+' out of 10 on Chassisquiver, '+kindText(r.kinds);
  if(!inCloud)toast(sb?'Sign in with sharing on so friends can open this run':'Friends can open shared runs once the cloud is connected');
  try{if(navigator.share){await navigator.share({title:'Chassisquiver road',text,url});return}}catch(e){if(e&&e.name==='AbortError')return}
  try{await navigator.clipboard.writeText(text+' '+url);toast('Link copied')}catch(e){prompt('Copy this link',url)}
@@ -710,7 +768,7 @@ async function shareRun(id){
 function openHash(){const m=location.hash.match(/run=([a-z0-9]+)/i);if(!m)return;setMode('map');setTimeout(()=>focusRun(m[1]),200)}
 window.addEventListener('hashchange',openHash);
 
-function refreshViews(){if(CFG.mode==='roads')renderRoads();else if(CFG.mode==='map')renderMap()}
+function refreshViews(){computeScores();if(CFG.mode==='roads')renderRoads();else if(CFG.mode==='map')renderMap()}
 
 function fft(re,im){
  const n=re.length;
@@ -842,9 +900,9 @@ function readouts(){
   const sp=gpsFresh()?S.gps.speed:null;$('rMph').textContent=sp==null?'none':Math.round(sp*2.23694);
   $('rRoadName').textContent=S.rec&&S.curRoad?'On '+S.curRoad:'';
   const R=S.rec,el=$('rRec');
-  if(R){const st=liveStats(R);$('rOut').textContent=st.outside.toFixed(1)+'%';$('rSpk').textContent=st.spikes;$('rScore').textContent=R.t>=10?st.score.toFixed(1):'wait';
+  if(R){const st=liveStats(R),sc=relScore(st.rindex,CFG.vehicle,S.curRoad);$('rOut').textContent=st.events;$('rSpk').textContent=st.rindex==null?'0.00':st.rindex.toFixed(2);$('rScore').textContent=R.t>=10&&sc!=null?sc.toFixed(1):'wait';
    el.className='trip rec';el.textContent=(R.auto?'Auto logging ':'Recording ')+fmtTime(R.wall)+'   scored '+fmtTime(R.t)+(R.dist?'   '+(R.dist/1609.34).toFixed(2)+' mi':'')+(CFG.gps&&sp!=null&&sp<=2?'   paused while stopped':'')}
-  else{const spm=S.spikeT.length;$('rOut').textContent=(S.liveOut*100).toFixed(1)+'%';$('rSpk').textContent=spm;$('rScore').textContent=S.on?scoreOf(S.liveOut,spm).toFixed(1):'none';
+  else{const evs=S.liveEv,ex=evs.reduce((a,e)=>a+e.ex,0),ri=S.on?rIndex(ex,evs.length,1,sp==null?null:sp*2.23694):null,sc=ri==null?null:relScore(ri,CFG.vehicle,S.curRoad);$('rOut').textContent=evs.length;$('rSpk').textContent=ri==null?'0.00':ri.toFixed(2);$('rScore').textContent=sc==null?'none':sc.toFixed(1);
    el.className='trip';el.textContent=!S.on?'Press START. '+(CFG.auto&&CFG.gps?'Logging begins on its own once you are rolling.':'Then press RECORD RUN at the start of a stretch of road.'):(CFG.auto&&CFG.gps?'Live view of the last minute. Logging begins on its own above 15 mph.':'Live view of the last minute. Press RECORD RUN at the start of a stretch of road.')}
  }
 }
@@ -865,7 +923,7 @@ const EXPLAIN={
 about:['About and safety',
 '<p>Chassisquiver turns the motion sensors in your phone into a small automotive companion. It reads the accelerometer, gyroscope and GPS and splits what it feels into body motion, road vibration and engine vibration, plus steering angle, pitch, and a road quality score that it maps along the roads you drive.</p>'+
 '<p>Safety first. Mount the phone on the rim or a spoke of the steering wheel, never on the center pad, because the airbag deploys from the center and would launch the phone. Use a mount that holds tight. Press START and RECENTER before you drive and leave the screen alone while the car is moving. Auto logging handles the runs on its own, and a passenger can do anything else.</p>'+
-'<p>Your runs save on this phone. When you sign in, they also sync to your account. With sharing on, other people can see your runs on the map and in road ratings, with the first and last 0.2 miles of each path left out by default so trips do not point at your driveway. Turn sharing off in the menu to keep runs private to your account.</p>'+
+'<p>Your runs save on this phone. When you sign in, they also sync to your account. With sharing on, other people can see your runs on the map and in road ratings, with the first and last 0.2 miles of each path left out by default so trips do not point at your driveway. Turn sharing off in the menu to keep runs private to your account. Scores are calculated automatically from what the sensors record.</p>'+
 '<p>Road names come from OpenStreetMap through its Nominatim lookup, and the map uses OpenStreetMap tiles.</p>'+
 '<p>These readings are for fun and curiosity. Phone sensors are not calibrated test equipment.</p>'],
 scope:['Scope',
@@ -892,21 +950,23 @@ tele:['Telemetry',
 road:['Road quality',
 '<p>This mode measures how rough the road feels at the steering wheel, the place where your hands meet the road. Everyone mounts on the wheel, so runs from different phones and vehicles share the same starting point.</p>'+
 '<p>The orange trace is all vibration faster than body sway, combined from all three axes. The shaded strip between the dotted red lines is the road band. Normal running vibration lives inside it. Every red dot is a moment the road pushed past the band.</p>'+
-'<p>OUTSIDE is the share of time spent past the band. SPIKES counts hard hits stronger than the bump and spike threshold. SCORE turns both into a number from 0 to 10, where 10 means the trace stayed inside the band with no spikes. Every percent of time outside the band costs 0.4 points and every spike per minute costs a third of a point.</p>'+
-'<p>Auto logging: with the app open, START pressed and GPS on, logging begins by itself once you hold above 15 mph for a few seconds, and ends after a minute and a half stopped. The app looks up the road name every half minute as you drive and splits the trip into one run per road, each with its own score and map path. Stops at lights are left out of the score. Rate the stretches later from Road ratings or the map.</p>'+
-'<p>Manual runs: RECORD RUN and END RUN log one stretch from start to finish, then ask for a name and your own rating from 0 to 10.</p>'+
-'<p>The phone stops sending sensor data when the screen is off or another app is in front, so keep Chassisquiver on screen while logging. Keep screen awake in the menu handles the sleep timer.</p>'+
-'<p>Speed changes the reading a lot, so compare runs at similar speeds. Keep the same band width and spike threshold across runs so scores stay comparable. Each saved run remembers the settings it used.</p>'],
+'<p>Events: when the trace leaves the band, the app opens an event and keeps it open until the trace has stayed back inside for a quarter second. A short sharp hit like a pothole or expansion joint is a hit. An event lasting longer than about a third of a second is a rough patch. One lasting two seconds or more is a washboard stretch. Tiny brushes past the band that are neither long nor hard are ignored. Each event records where it happened, how long it lasted, its peak, and how far past the band it went in total.</p>'+
+'<p>ROUGH is the roughness index: how far past the band the road pushed per minute, plus a little extra for every event, adjusted for speed because faster driving shakes harder. EVENTS counts events in the run, or in the last minute when not recording.</p>'+
+'<p>SCORE is fully automatic. The first run ever logged on a road scores 5 and becomes that road\'s baseline. Every later run is compared to the baseline: twice as rough as the baseline scores 2.5, half as rough scores 7.5, and so on down to 0 and up to 10. The road\'s own score blends all its runs with the newest counting most, so a road that gets repaved climbs and a road that falls apart drops.</p>'+
+'<p>Vehicles are evened out. Once a vehicle has a few runs, the app learns how much rougher or smoother it rides than everyone else and divides that out, so worn tires on a heavy pickup and a soft luxury sedan can score the same road fairly.</p>'+
+'<p>Auto logging: with the app open, START pressed and GPS on, logging begins by itself once you hold above 15 mph for a few seconds, and ends after a minute and a half stopped. The app looks up the road name every half minute as you drive and splits the trip into one run per road. Stops at lights are left out.</p>'+
+'<p>Manual runs: RECORD RUN and END RUN log one stretch from start to finish, then ask only for the road name.</p>'+
+'<p>The phone stops sending sensor data when the screen is off or another app is in front, so keep Chassisquiver on screen while logging. Keep screen awake in the menu handles the sleep timer. Keep the band width the same across runs so scores stay comparable.</p>'],
 map:['Road map',
-'<p>Every run with a GPS path is drawn on the map, colored by how rough each piece of road was. Green is smooth, orange is middling and red is rough. Each color comes from a short stretch around that spot, so single potholes show up as red patches on an otherwise green road.</p>'+
-'<p>Tap a road to see its score, how it felt to the driver, the vehicle that recorded it and the date. SHARE sends a link that opens this exact stretch on a friend\'s phone. RATE lets you give your own score to runs you recorded.</p>'+
-'<p>MY RUNS shows your runs, SHARED shows runs everyone has shared, and BOTH merges them. FIT ALL zooms to every run on screen. The blue dot is you.</p>'+
-'<p>Friends can only open a shared link for runs that were synced to an account with sharing on.</p>'],
+'<p>Every run with a GPS path is drawn on the map, colored by how rough each piece of road was compared to that road\'s baseline. Green is smoother than usual, orange is about normal and red is rougher. Each color comes from a short stretch around that spot.</p>'+
+'<p>Small dots mark events: red for hits, orange for rough patches, purple for washboard stretches. Dots that pile up in the same spot across many runs point at a real pothole or broken pavement.</p>'+
+'<p>Tap a road to see its score, whether it was smoother or rougher than the run before, its events, the vehicle and the date. SHARE sends a link that opens this exact stretch on a friend\'s phone. RENAME fixes a road name the automatic lookup got wrong.</p>'+
+'<p>MY RUNS shows your runs, SHARED shows runs everyone has shared, and BOTH merges them. FIT ALL zooms to every run on screen. The blue dot is you.</p>'],
 roads:['Road ratings',
-'<p>Every run is grouped by road name. Each road shows the average measured score, how many runs and drivers it came from, how it ranks against the other roads, and the average rating people gave it by feel.</p>'+
-'<p>Tap a road to open it. The breakdown by vehicle type shows how the same road feels from a car, a pickup, a semi and so on. Comparing the measured score to the felt rating shows where people judge a road harsher or kinder than the sensors do. Each run lists the vehicle, mileage and tires it was recorded with, since worn tires and stiff suspension add a lot of vibration on their own.</p>'+
-'<p>MAP jumps to that run on the road map. RATE adds your own score and lets you fix the road name. EXPORT FILE saves everything shown to a file you can keep or analyze elsewhere.</p>'+
-'<p>Fill in your vehicle under My vehicle in the menu so your runs carry it. Signed in, your vehicle follows your account to other phones.</p>']
+'<p>Every run is grouped by road name. Each road shows its automatic score, how many runs and drivers it came from, whether it is getting smoother or rougher lately, and its average events per mile.</p>'+
+'<p>The first run on a road sets its baseline at 5. Later runs score above 5 when smoother than the baseline and below 5 when rougher, after evening out differences between vehicles. Scores compare a road with itself over time, so a dirt road and a fresh highway can both sit near 5.</p>'+
+'<p>Tap a road to open it. The breakdown by vehicle type shows how the same road scores from a car, a pickup, a semi and so on. Each run lists its events, speed, distance, and the vehicle it was recorded with.</p>'+
+'<p>MAP jumps to that run on the road map. RENAME fixes the road name, which moves the run onto the right road. EXPORT FILE saves everything shown to a file you can keep or analyze elsewhere.</p>']
 };
 function explain(k){const e=EXPLAIN[k];$('mTitle').textContent=e[0];$('mBody').innerHTML=e[1];$('modal').classList.add('on')}
 $('mClose').onclick=()=>$('modal').classList.remove('on');
@@ -963,7 +1023,7 @@ const VF={vType:'type',vMake:'make',vModel:'model',vYear:'year',vMiles:'miles',v
 for(const id in VF){const el=$(id);const h=()=>{let val=el.value;if(el.type==='text')val=val.slice(0,40);CFG.vehicle[VF[id]]=val;saveCfg();pushVehicle()};el.oninput=h;el.onchange=h}
 
 syncSettings();setMode(TITLES[CFG.mode]?CFG.mode:'scope');
-cloudInit();
+computeScores();cloudInit();
 if(!CFG.seenAbout&&!location.hash){CFG.seenAbout=true;saveCfg();explain('about')}
 openHash();
 requestAnimationFrame(loop);

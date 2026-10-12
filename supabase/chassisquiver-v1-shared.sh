@@ -4,9 +4,11 @@ command -v jq >/dev/null 2>&1 || { apt-get update -y && apt-get install -y jq cu
 API=https://api.supabase.com/v1
 REF=vogxdikogfaxhwcgajfg
 TOKEN=${SUPABASE_ACCESS_TOKEN:-$(cat ~/.supabase/access-token 2>/dev/null)}
-jq -Rs '{query: .}' supabase/chassisquiver-v1-setup.sql > /tmp/chassisquiver-v1-query.json
-OUT=$(curl -s -X POST "$API/projects/$REF/database/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data-binary @/tmp/chassisquiver-v1-query.json)
-echo "TABLE SETUP: $OUT"
+for F in $(ls supabase/chassisquiver-v*.sql | sort); do
+  jq -Rs '{query: .}' "$F" > /tmp/chassisquiver-v1-query.json
+  OUT=$(curl -s -X POST "$API/projects/$REF/database/query" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data-binary @/tmp/chassisquiver-v1-query.json)
+  echo "DATABASE $F: $OUT"
+done
 CUR=$(curl -s "$API/projects/$REF/config/auth" -H "Authorization: Bearer $TOKEN" | jq -r '.uri_allow_list // ""')
 case "$CUR" in
   *chassisquiver.vercel.app*) NEW="$CUR" ;;
