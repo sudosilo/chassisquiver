@@ -257,7 +257,7 @@ const S={on:false,rate:60,lastT:0,samples:0,
  rq:new Float32Array(N),
  fb:[new Float32Array(FN),new Float32Array(FN),new Float32Array(FN)],fi:0,
  hist:{road:new Float32Array(HN),eng:new Float32Array(HN),body:new Float32Array(HN),i:0},
- prevAcc:null,accUnw:0,steer:0,steerZero:0,gyroScale:0,gyroSeen:false,votes:{},calA:0,calG:0,calT:0,
+ prevAcc:null,accUnw:0,steer:0,steerZero:0,steerInit:false,steerDisp:0,gLP:0,gBias:0,yawRate:0,yawT:0,gyroScale:0,gyroLocked:false,gyroSeen:false,votes:{},calA:0,calG:0,calT:0,
  pitchLP:0,pitchZero:0,raw:[0,0,0],spec:null,peak:null,
  liveOut:0,spikeT:[],lastSpike:0,evt:{on:false,t0:0,last:0,peak:0,ex:0},liveEv:[],
  gps:{watch:null,speed:null,pos:null,acc:null,fixT:0,prev:null,prevT:0},
@@ -335,28 +335,46 @@ function gpsFresh(){return S.gps.fixT&&Date.now()-S.gps.fixT<6000}
 function moving(){return !CFG.gps||!gpsFresh()||S.gps.speed==null||S.gps.speed>2}
 
 function steering(e,dt){
- const gx=S.gFast[0],gy=S.gFast[1],h=Math.hypot(gx,gy);
+ const gx=S.gFast[0],gy=S.gFast[1],gz=S.gFast[2],gm=Math.hypot(gx,gy,gz),h=Math.hypot(gx,gy);
  let d=0;
  if(h>3){const ang=Math.atan2(gx,gy)*DEG;if(S.prevAcc==null)S.prevAcc=ang;d=ang-S.prevAcc;if(d>180)d-=360;if(d<-180)d+=360;S.prevAcc=ang;S.accUnw+=d}
+ if(!S.steerInit&&h>3){S.steer=S.accUnw;S.steerDisp=S.accUnw;S.steerZero=S.accUnw;S.steerInit=true}
+ const sp=gpsFresh()?S.gps.speed:null,rolling=sp!=null&&sp>3;
+ const rm=Math.hypot(S.raw[0],S.raw[1],S.raw[2]);
+ const clean=Math.abs(rm-9.81)<0.6&&(S.eRoad+S.eEng)<0.25;
  const rr=e.rotationRate;
  const gr=(rr&&typeof rr.alpha==='number'&&isFinite(rr.alpha))?rr.alpha:null;
- if(gr!=null)S.gyroSeen=true;
- if(gr!=null&&!S.gyroScale){S.calA+=d;S.calG+=gr*dt;S.calT+=dt;if(S.calT>=0.6){if(Math.abs(S.calA)>8&&Math.abs(S.calG)>0.01)vote(S.calA/S.calG);S.calA=0;S.calG=0;S.calT=0}}
- if(gr!=null&&S.gyroScale){S.steer+=gr*S.gyroScale*dt;if(h>3)S.steer+=(S.accUnw-S.steer)*Math.min(1,dt*0.5)}
- else S.steer=S.accUnw;
+ if(gr!=null){
+  S.gyroSeen=true;
+  if(!S.gyroScale)S.gyroScale=1;
+  if(!S.gyroLocked&&!rolling&&clean){S.calA+=d;S.calG+=gr*dt;S.calT+=dt;if(S.calT>=0.6){if(Math.abs(S.calA)>8&&Math.abs(S.calG)>0.01)vote(S.calA/S.calG);S.calA=0;S.calG=0;S.calT=0}}
+  S.gLP=lp(S.gLP,gr*S.gyroScale,2.5,dt);
+  const up=gm>3?gz/gm:0,yaw=(Date.now()-S.yawT<3000)?S.yawRate:0;
+  let w=S.gLP-yaw*up;
+  if(!rolling&&clean&&Math.abs(w-S.gBias)<2)S.gBias=lp(S.gBias,w,0.05,dt);
+  w-=S.gBias;
+  if(Math.abs(w)<1)w=0;
+  S.steer+=w*dt;
+  if(!rolling&&clean&&h>3)S.steer+=(S.accUnw-S.steer)*Math.min(1,dt*0.4);
+ }else{
+  if(!rolling||clean)S.steer=lp(S.steer,S.accUnw,rolling?0.15:0.6,dt);
+ }
+ if(rolling&&sp>8&&Math.abs(S.steer-S.steerZero)<20)S.steer+=(S.steerZero-S.steer)*Math.min(1,dt/45);
+ const nd=lp(S.steerDisp,S.steer,1.2,dt);
+ if(Math.abs(nd-S.steerDisp)>0.02||Math.abs(S.steer-S.steerDisp)>0.6)S.steerDisp=nd;
 }
 function vote(r){
  const C=[1,-1,DEG,-DEG];let best=null,bd=1e9;
  for(const c of C){if(Math.sign(c)!==Math.sign(r))continue;const dd=Math.abs(Math.log(Math.abs(r)/Math.abs(c)));if(dd<bd){bd=dd;best=c}}
  if(best==null||bd>0.5)return;
  S.votes[best]=(S.votes[best]||0)+1;
- if(S.votes[best]>=3){S.gyroScale=best;toast('Gyro assist locked in')}
+ if(S.votes[best]>=3){S.gyroLocked=true;S.gyroScale=best;toast('Gyro units confirmed')}
 }
 function recenter(){if(!S.on){toast('Press START first');return}S.collecting=0.8;S.acc=[0,0,0];S.accN=0;toast('Recentering, hold steady')}
 function finishRecenter(){
  if(!S.accN)return;
  S.base=S.acc.map(v=>v/S.accN);
- S.steerZero=S.steer;S.pitchZero=S.pitchLP;S.drift=[0,0,0];
+ S.steerZero=S.steer;S.steerDisp=S.steer;S.pitchZero=S.pitchLP;S.drift=[0,0,0];
  toast('Centered');
 }
 function resetTrip(){S.trip={t:0,sum:0,n:0,peak:0,bumps:0,lastBump:0};toast('Trip reset')}
@@ -394,6 +412,11 @@ function onFix(p){
  if(!(c.accuracy<80))return;
  let sp=(typeof c.speed==='number'&&isFinite(c.speed))?c.speed:null;
  if(sp==null&&G.prev&&now>G.prevT){sp=hav(G.prev,pt)/((now-G.prevT)/1000)}
+ let hd=(typeof c.heading==='number'&&isFinite(c.heading))?c.heading:null;
+ if(hd==null&&G.prev&&hav(G.prev,pt)>3){const r=Math.PI/180,y=Math.sin((pt[1]-G.prev[1])*r)*Math.cos(pt[0]*r),x=Math.cos(G.prev[0]*r)*Math.sin(pt[0]*r)-Math.sin(G.prev[0]*r)*Math.cos(pt[0]*r)*Math.cos((pt[1]-G.prev[1])*r);hd=(Math.atan2(y,x)/r+360)%360}
+ if(sp!=null&&sp>3&&hd!=null&&G.hd!=null&&now>G.hdT){let dh=hd-G.hd;if(dh>180)dh-=360;if(dh<-180)dh+=360;const yr=-dh/((now-G.hdT)/1000);if(Math.abs(yr)<60){S.yawRate=S.yawRate*0.4+yr*0.6;S.yawT=now}}
+ else if(sp!=null&&sp<=3){S.yawRate=0;S.yawT=now}
+ if(hd!=null){G.hd=hd;G.hdT=now}
  G.prev=pt;G.prevT=now;G.pos=pt;G.acc=c.accuracy;G.fixT=now;G.speed=sp;
  const R=S.rec;
  if(R){
@@ -881,7 +904,7 @@ function drawSpec(){
 function drawTele(){
  const c=fit($('cTele')),x=c.getContext('2d'),W=c.width,H=c.height,d=devicePixelRatio||1;
  clear(x,W,H);
- const st=S.steer-S.steerZero,cx=W/2,cy=H*0.33,r=Math.min(W*0.34,H*0.25);
+ const st=S.steerDisp-S.steerZero,cx=W/2,cy=H*0.33,r=Math.min(W*0.34,H*0.25);
  x.save();x.translate(cx,cy);x.rotate(-st/DEG);
  x.strokeStyle=COL.ink;x.lineWidth=r*0.13;x.beginPath();x.arc(0,0,r,0,Math.PI*2);x.stroke();
  x.lineWidth=r*0.1;x.beginPath();x.moveTo(-r,0);x.lineTo(r,0);x.moveTo(0,0);x.lineTo(0,r);x.stroke();
@@ -916,7 +939,7 @@ function readouts(){
  else if(m==='vib'){$('rRoad').textContent=Math.sqrt(S.eRoad).toFixed(2);$('rEng').textContent=Math.sqrt(S.eEng).toFixed(2);$('rBody').textContent=Math.sqrt(S.eBody).toFixed(2);$('rBumps').textContent=S.trip.bumps;
   const tr=S.trip;$('rTrip').textContent=tr.n?('Trip '+fmtTime(tr.t)+'   road avg '+(tr.sum/tr.n).toFixed(2)+'   road peak '+tr.peak.toFixed(2)+'   m/s²'):'Trip idle'}
  else if(m==='spec'){$('rCyl').textContent=CFG.cyl;if(S.peak){$('rPeak').textContent=S.peak.f.toFixed(1);$('rRpm').textContent=Math.round(S.peak.f*120/CFG.cyl)}else{$('rPeak').textContent='none';$('rRpm').textContent='none'}}
- else if(m==='tele'){const p=S.pitchLP-S.pitchZero;$('rSteer').textContent=fmtSteer(S.steer-S.steerZero);$('rPitch').textContent=(p>=0?'+':'')+p.toFixed(1)+'° '+(Math.tan(p/DEG)*100).toFixed(0)+'%';$('rGyro').textContent=S.gyroScale?'locked':(S.gyroSeen?'learning':'none')}
+ else if(m==='tele'){const p=S.pitchLP-S.pitchZero;$('rSteer').textContent=fmtSteer(S.steerDisp-S.steerZero);$('rPitch').textContent=(p>=0?'+':'')+p.toFixed(1)+'° '+(Math.tan(p/DEG)*100).toFixed(0)+'%';$('rGyro').textContent=!S.gyroSeen?'none':S.gyroLocked?'locked':'on'}
  else if(m==='road'){
   const sp=gpsFresh()?S.gps.speed:null;$('rMph').textContent=sp==null?'none':Math.round(sp*2.23694);
   $('rRoadName').textContent=S.rec&&S.curRoad?'On '+S.curRoad:'';
@@ -964,8 +987,9 @@ spec:['Spectrum',
 '<p>The orange marker is the strongest clear peak in the engine band. A four stroke engine fires once per two crankshaft turns per cylinder, so RPM is estimated as peak frequency times 120 divided by the cylinder count. Set your cylinder count in the menu.</p>'+
 '<p>The phone browser limits how fast the sensor is read. The status line shows the highest frequency this phone can see, which is half the sample rate. Vibration faster than that folds back and shows up at a lower false frequency, so a big engine at high RPM can read low or jump around. Idle and low RPM give the most believable numbers.</p>'],
 tele:['Telemetry',
-'<p>Steering angle comes from where gravity points across the screen, so it works best with the phone on the wheel and the wheel tilted up toward you. L means turned left and R means turned right from where you pressed RECENTER. The counter keeps going past a full turn.</p>'+
-'<p>Hard cornering pushes on the sensor too, so the phone also uses its gyroscope when it has one. The gyro needs to learn this phone\'s units first: while parked, turn the wheel lock to lock a few times. The GYRO box changes from learning to locked when it is ready.</p>'+
+'<p>Steering angle follows the wheel itself. The gyroscope measures how fast the phone spins around the axis pointing out of the screen, which is the steering column, and the app adds that up into an angle. L means turned left and R means turned right from where you pressed RECENTER.</p>'+
+'<p>Bumps, engine buzz and cornering forces are filtered out four ways. Fast shaking is smoothed away before it is added up, and spin slower than a degree per second is treated as no movement at all, so the reading holds still when your hands do. The car turning through a curve also spins the phone a little, so the app measures how fast the car is turning from GPS and subtracts it. While parked and steady the app learns the gyroscope\'s own drift and corrects for it, and lines the angle back up with gravity. At highway speed the reading eases back toward center over the better part of a minute, since straight roads are driven with the wheel near center.</p>'+
+'<p>Phones without a gyroscope fall back to gravity alone, which is heavily smoothed while driving because cornering forces fool it.</p>'+
 '<p>Pitch shows how much the phone has tilted forward or back since RECENTER, which follows hills and grades. The percent is the matching road grade. Braking and accelerating also nudge it, so it reads cleanest at steady speed. The blue arrow exaggerates the tilt by four so small grades are visible.</p>'+
 '<p>The body G ball shows slow pushes on the car, side to side and forward and back, turned to line up with the car even when the wheel is turned. The inner ring is a quarter g and the outer ring is half a g.</p>'],
 road:['Road quality',
