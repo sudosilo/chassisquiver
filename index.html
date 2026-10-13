@@ -89,6 +89,7 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 #legend i{display:block;width:120px;height:8px;border-radius:4px;margin:4px 0;background:linear-gradient(90deg,#c93b3b,#d9822b,#2f9e6b)}
 #legend div{display:flex;justify-content:space-between}
 #mapFit{position:absolute;left:8px;bottom:22px;z-index:500}
+#mapBest{position:absolute;left:8px;bottom:60px;z-index:500}
 .leaflet-popup-content{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;color:var(--ink)}
 .leaflet-popup-content b.ps{font-size:22px;color:var(--accent)}
 .pbtns{display:flex;gap:6px;margin-top:6px}
@@ -152,6 +153,7 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 <div class="seg srcSeg"><button data-s="mine">MY RUNS</button><button data-s="pool">SHARED</button><button data-s="all">BOTH</button></div>
 <div id="mapWrap"><div id="map"></div>
 <button class="pbtn" id="mapFit">FIT ALL</button>
+<button class="pbtn" id="mapBest"></button>
 <div id="legend">ROAD SCORE<i></i><div><span>0 rough</span><span>10 smooth</span></div></div></div>
 </section>
 <section class="view" id="v-roads">
@@ -228,7 +230,7 @@ const COL={bg:'#f4f1ea',panel:'#fffdf8',ink:'#1d2430',mute:'#6b7280',line:'#d9d3
 const TITLES={scope:'Scope',vib:'Vibration',spec:'Spectrum',tele:'Telemetry',road:'Road quality',map:'Road map',roads:'Road ratings'};
 const VTYPES={car:'Car',suv:'SUV',pickup:'Pickup',dually:'Dually',van:'Van',box:'Box truck',semi:'Semi',rv:'RV',other:'Other'};
 const KEY='chassisquiver-v1-cfg',RKEY='chassisquiver-v1-runs';
-const DEF={gain:1,split:12,cyl:4,smooth:3,bump:3,band:1.5,wake:true,gps:true,auto:true,share:true,trim:true,mode:'scope',seenAbout:false,src:'all',lastRoad:'',
+const DEF={gain:1,split:12,cyl:4,smooth:3,bump:3,band:1.5,wake:true,gps:true,auto:true,mapBest:true,share:true,trim:true,mode:'scope',seenAbout:false,src:'all',lastRoad:'',
  vehicle:{type:'car',make:'',model:'',year:'',miles:'',tires:'good',tiretype:'highway',susp:'stock'},vehicles:null,vid:''};
 const MAXV=20;
 let CFG=JSON.parse(JSON.stringify(DEF));
@@ -755,25 +757,45 @@ function popupHtml(r){
  '<div class="pbtns"><button class="pbtn" data-share="'+esc(r.id)+'">SHARE</button>'+(mine?'<button class="pbtn" data-pren="'+esc(r.id)+'">RENAME</button>':'')+'</div>';
 }
 const EVCOL=['#c93b3b','#d9822b','#7b4fc9'];
+function segBearing(a,b){const r=Math.PI/180,y=Math.sin((b[1]-a[1])*r)*Math.cos(b[0]*r),x=Math.cos(a[0]*r)*Math.sin(b[0]*r)-Math.sin(a[0]*r)*Math.cos(b[0]*r)*Math.cos((b[1]-a[1])*r);return (Math.atan2(y,x)/r+360)%180}
+function cellOf(m){const c=Math.cos(m[0]*Math.PI/180);return [Math.round(m[0]/0.0002),Math.round(m[1]*c/0.0002)]}
 function renderMap(){
  syncSeg();computeScores();
+ $('mapBest').textContent=CFG.mapBest?'BEST PASS':'EACH PASS';
  if(!ensureMap())return;
  LAYER.clearLayers();RUNLAYERS.clear();
  const runs=srcRuns().filter(r=>r.path&&r.path.length>1);
- const all=[];
+ const all=[],segs=[],grid=new Map();
  for(const r of runs){
-  const P=r.path,grp=L.featureGroup(),W=3,band=r.band||1.5;
+  const P=r.path,W=3,band=r.band||1.5;
   for(let i=1;i<P.length;i++){
    let n=0,out=0,mt=0,ev=0,ex=0,sp=0,has=false;
    for(let j=Math.max(1,i-W);j<=Math.min(P.length-1,i+W);j++){n+=P[j][2]||0;out+=P[j][3]||0;sp+=P[j][4]||0;mt+=P[j][5]||0;if(P[j].length>8){has=true;ev+=P[j][8]||0;ex+=P[j][9]||0}}
    if(!has){ex=n?(out/n)*mt*0.5*band:0;ev=sp}
    const sc=n&&mt>0?relScore(rIndex(ex,ev,mt/60,P[i][7]),r.vehicle,r.road):null;
-   L.polyline([[P[i-1][0],P[i-1][1]],[P[i][0],P[i][1]]],{color:scoreColor(sc),weight:6,opacity:0.9,lineCap:'round'}).addTo(grp);
+   const A=[P[i-1][0],P[i-1][1]],B=[P[i][0],P[i][1]],mid=[(A[0]+B[0])/2,(A[1]+B[1])/2];
+   const sg={r,A,B,mid,sc,brg:segBearing(A,B)};segs.push(sg);
+   if(sc!=null){const c=cellOf(mid),k=c[0]+':'+c[1];if(!grid.has(k))grid.set(k,[]);grid.get(k).push(sg)}
   }
+ }
+ const bestFor=sg=>{
+  if(sg.sc==null)return null;let best=sg.sc;const c=cellOf(sg.mid);
+  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const L2=grid.get((c[0]+dy)+':'+(c[1]+dx));if(!L2)continue;
+   for(const o of L2){if(o.sc<=best)continue;let da=Math.abs(o.brg-sg.brg);if(da>90)da=180-da;if(da>25)continue;if(hav(o.mid,sg.mid)>30)continue;best=o.sc}}
+  return best;
+ };
+ const groups=new Map();
+ for(const sg of segs){
+  if(!groups.has(sg.r.id))groups.set(sg.r.id,L.featureGroup());
+  const sc=CFG.mapBest?bestFor(sg):sg.sc;
+  L.polyline([sg.A,sg.B],{color:scoreColor(sc),weight:6,opacity:0.9,lineCap:'round'}).addTo(groups.get(sg.r.id));
+ }
+ for(const r of runs){
+  const grp=groups.get(r.id)||L.featureGroup();
   (r.evlist||[]).forEach(e=>L.circleMarker([e[0],e[1]],{radius:3,color:EVCOL[e[5]]||EVCOL[0],weight:1,fillColor:EVCOL[e[5]]||EVCOL[0],fillOpacity:0.9}).addTo(grp));
   grp.bindPopup(()=>popupHtml(r));
   grp.addTo(LAYER);RUNLAYERS.set(r.id,grp);
-  for(const p of P)all.push([p[0],p[1]]);
+  for(const p of r.path)all.push([p[0],p[1]]);
  }
  drawMe();
  if(!fitted&&all.length){fitted=true;MAP.fitBounds(all,{padding:[20,20],maxZoom:15})}
@@ -1005,7 +1027,8 @@ road:['Road quality',
 '<p>The phone stops sending sensor data when the screen is off or another app is in front, so keep Chassisquiver on screen while logging. Keep screen awake in the menu handles the sleep timer. Keep the band width the same across runs so scores stay comparable.</p>'],
 map:['Road map',
 '<p>Every run with a GPS path is drawn on the map, colored by how rough each piece of road was compared to that road\'s baseline. Green is smoother than usual, orange is about normal and red is rougher. Each color comes from a short stretch around that spot.</p>'+
-'<p>Small dots mark events: red for hits, orange for rough patches, purple for washboard stretches. Dots that pile up in the same spot across many runs point at a real pothole or broken pavement.</p>'+
+'<p>BEST PASS is the default. Where several passes cover the same stretch, in either direction and from any driver, the map paints that stretch with the smoothest pass, so if one lane or direction is fine the road shows green there. Only a stretch where every pass was rough stays red. Tap the button to switch to EACH PASS, which paints every run with its own colors.</p>'+
+'<p>Small dots mark events: red for hits, orange for rough patches, purple for washboard stretches, which are long runs of continuous shaking like corrugated dirt or grooved pavement. Dots that pile up in the same spot across many runs point at a real pothole or broken pavement.</p>'+
 '<p>Tap a road to see its score, whether it was smoother or rougher than the run before, its events, the vehicle and the date. SHARE sends a link that opens this exact stretch on a friend\'s phone. RENAME fixes a road name the automatic lookup got wrong.</p>'+
 '<p>MY RUNS shows your runs, SHARED shows runs everyone has shared, and BOTH merges them. FIT ALL zooms to every run on screen. The blue dot is you.</p>'],
 roads:['Road ratings',
@@ -1033,6 +1056,7 @@ $('mAbout').onclick=()=>{closeDrawer();explain('about')};
 $('bRefresh').onclick=()=>pullCloud(false);
 $('bExport').onclick=exportRuns;
 $('mapFit').onclick=fitAll;
+$('mapBest').onclick=()=>{CFG.mapBest=!CFG.mapBest;saveCfg();renderMap();toast(CFG.mapBest?'Showing the smoothest pass on each stretch':'Showing every pass as recorded')};
 document.querySelectorAll('.srcSeg button').forEach(b=>b.onclick=()=>{CFG.src=b.dataset.s;saveCfg();refreshViews();if(CFG.src!=='mine')pullCloud(true)});
 function setMode(m){
  CFG.mode=m;saveCfg();
