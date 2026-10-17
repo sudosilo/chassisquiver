@@ -104,7 +104,7 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 <h1>FIELD TWIN <span style="color:#6082b6">GLAUCOUS</span><small id="modeName">Scope</small></h1>
 <button class="iconbtn" id="bInfo" aria-label="Explainer">i</button>
 </header>
-<nav class="ft-sites" aria-label="Field Twin apps"><a href="https://field-twin-teal.vercel.app/#map">Field map</a><a href="https://field-twin-violet.vercel.app/">Inventory</a><a class="on" aria-current="page" href="https://chassisquiver.vercel.app/">Roads</a></nav>
+<nav class="ft-sites" aria-label="Field Twin apps"><a href="https://field-twin-teal.vercel.app/#map">Field map</a><a href="https://field-twin-violet.vercel.app/">Inventory</a><a class="on" aria-current="page" href="https://field-twin-glaucous.vercel.app/">Roads</a></nav>
 <div id="status"><span id="stRate">Sensors off</span><span id="stNyq"></span></div>
 <main>
 <section class="view" id="v-scope">
@@ -226,7 +226,7 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 const CQC=window.CHASSISQUIVER_CONFIG||{};
 const SB_URL=CQC.url||'https://vogxdikogfaxhwcgajfg.supabase.co';
 const SB_KEY=CQC.key||'';
-const SITE='https://chassisquiver.vercel.app/';
+const SITE=/^https?:/.test(location.protocol)?location.origin+'/':'https://field-twin-glaucous.vercel.app/';
 
 const DEG=180/Math.PI;
 const $=id=>document.getElementById(id);
