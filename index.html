@@ -3,13 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f4f1ea">
-<title>Chassisquiver</title>
+<meta name="theme-color" content="#ffffff">
+<title>Field Twin Glaucous</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="chassisquiver-v1-config.js"></script>
 <style>
+.ft-sites{display:flex;height:38px;background:#ffffff;border-bottom:2px solid #0a1b2e;flex:0 0 auto}
+.ft-sites a{flex:1;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;font-weight:800;letter-spacing:.3px;color:#5a6d85;text-decoration:none}
+.ft-sites a.on{color:#0b4ea2;box-shadow:inset 0 -4px 0 #0a1b2e}
 :root{--bg:#f4f1ea;--panel:#fffdf8;--ink:#1d2430;--mute:#6b7280;--line:#d9d3c7;--accent:#d9822b;--x:#d64545;--y:#2f9e6b;--z:#3a6fd8;--road:#c0702a;--eng:#7b4fc9;--body:#2f9e6b;--bad:#c93b3b;--good:#2f9e6b}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace}
@@ -98,9 +101,10 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 <body>
 <header>
 <button class="iconbtn" id="bMenu" aria-label="Menu">&#9776;</button>
-<h1>CHASSISQUIVER<small id="modeName">Scope</small></h1>
+<h1>FIELD TWIN <span style="color:#6082b6">GLAUCOUS</span><small id="modeName">Scope</small></h1>
 <button class="iconbtn" id="bInfo" aria-label="Explainer">i</button>
 </header>
+<nav class="ft-sites" aria-label="Field Twin apps"><a href="https://field-twin-teal.vercel.app/#map">Field map</a><a href="https://field-twin-violet.vercel.app/">Inventory</a><a class="on" aria-current="page" href="https://chassisquiver.vercel.app/">Roads</a></nav>
 <div id="status"><span id="stRate">Sensors off</span><span id="stNyq"></span></div>
 <main>
 <section class="view" id="v-scope">
@@ -170,7 +174,7 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 
 <div id="scrim"></div>
 <nav id="drawer">
-<div class="dhead">CHASSISQUIVER</div>
+<div class="dhead">FIELD TWIN <span style="color:#6082b6">GLAUCOUS</span></div>
 <div class="dsec">MODE</div>
 <button class="item mode" data-m="scope">Scope</button>
 <button class="item mode" data-m="vib">Vibration</button>
@@ -826,9 +830,9 @@ async function shareRun(id){
  const inCloud=CLOUD.some(x=>x.id===id&&x.shared!==false)||(r.synced&&CFG.share);
  const base=/^https?:/.test(location.protocol)?location.origin+location.pathname:SITE;
  const url=base+'#run='+id;
- computeScores();const text=r.road+': '+tripScore(r).toFixed(1)+' out of 10 on Chassisquiver, '+kindText(r.kinds);
+ computeScores();const text=r.road+': '+tripScore(r).toFixed(1)+' out of 10 on Field Twin Glaucous, '+kindText(r.kinds);
  if(!inCloud)toast(sb?'Sign in with sharing on so friends can open this run':'Friends can open shared runs once the cloud is connected');
- try{if(navigator.share){await navigator.share({title:'Chassisquiver road',text,url});return}}catch(e){if(e&&e.name==='AbortError')return}
+ try{if(navigator.share){await navigator.share({title:'Field Twin Glaucous road',text,url});return}}catch(e){if(e&&e.name==='AbortError')return}
  try{await navigator.clipboard.writeText(text+' '+url);toast('Link copied')}catch(e){prompt('Copy this link',url)}
 }
 function openHash(){const m=location.hash.match(/run=([a-z0-9]+)/i);if(!m)return;setMode('map');setTimeout(()=>focusRun(m[1]),200)}
@@ -987,7 +991,7 @@ function loop(t){
 
 const EXPLAIN={
 about:['About and safety',
-'<p>Chassisquiver turns the motion sensors in your phone into a small automotive companion. It reads the accelerometer, gyroscope and GPS and splits what it feels into body motion, road vibration and engine vibration, plus steering angle, pitch, and a road quality score that it maps along the roads you drive.</p>'+
+'<p>Field Twin Glaucous, first built as Chassisquiver, turns the motion sensors in your phone into a small automotive companion. It reads the accelerometer, gyroscope and GPS and splits what it feels into body motion, road vibration and engine vibration, plus steering angle, pitch, and a road quality score that it maps along the roads you drive.</p>'+
 '<p>Safety first. Mount the phone on the rim or a spoke of the steering wheel, never on the center pad, because the airbag deploys from the center and would launch the phone. Use a mount that holds tight. Press START and RECENTER before you drive and leave the screen alone while the car is moving. Auto logging handles the runs on its own, and a passenger can do anything else.</p>'+
 '<p>Your runs save on this phone. When you sign in, they also sync to your account. With sharing on, other people can see your runs on the map and in road ratings, with the first and last 0.2 miles of each path left out by default so trips do not point at your driveway. Turn sharing off in the menu to keep runs private to your account. Scores are calculated automatically from what the sensors record.</p>'+
 '<p>Road names come from OpenStreetMap through its Nominatim lookup, and the map uses OpenStreetMap tiles.</p>'+
@@ -1024,7 +1028,7 @@ road:['Road quality',
 '<p>Vehicles are evened out. Once a vehicle has a few runs, the app learns how much rougher or smoother it rides than everyone else and divides that out, so worn tires on a heavy pickup and a soft luxury sedan can score the same road fairly.</p>'+
 '<p>Auto logging: with the app open, START pressed and GPS on, logging begins by itself once you hold above 15 mph for a few seconds, and ends after a minute and a half stopped. The app looks up the road name every half minute as you drive and splits the trip into one run per road. Stops at lights are left out.</p>'+
 '<p>Manual runs: RECORD RUN and END RUN log one stretch from start to finish, then ask only for the road name.</p>'+
-'<p>The phone stops sending sensor data when the screen is off or another app is in front, so keep Chassisquiver on screen while logging. Keep screen awake in the menu handles the sleep timer. Keep the band width the same across runs so scores stay comparable.</p>'],
+'<p>The phone stops sending sensor data when the screen is off or another app is in front, so keep Field Twin Glaucous on screen while logging. Keep screen awake in the menu handles the sleep timer. Keep the band width the same across runs so scores stay comparable.</p>'],
 map:['Road map',
 '<p>Every run with a GPS path is drawn on the map, colored by how rough each piece of road was compared to that road\'s baseline. Green is smoother than usual, orange is about normal and red is rougher. Each color comes from a short stretch around that spot.</p>'+
 '<p>BEST PASS is the default. Where several passes cover the same stretch, in either direction and from any driver, the map paints that stretch with the smoothest pass, so if one lane or direction is fine the road shows green there. Only a stretch where every pass was rough stays red. Tap the button to switch to EACH PASS, which paints every run with its own colors.</p>'+
