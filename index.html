@@ -690,9 +690,27 @@ function setUser(u){
 }
 let vehT=0;
 function pushVehicle(){if(!sb||!USER)return;clearTimeout(vehT);vehT=setTimeout(()=>{sb.auth.updateUser({data:{vehicles:CFG.vehicles,vid:CFG.vid,vehicle:activeV()}}).catch(()=>{})},1500)}
+// One sign in: Field Twin Teal opens this page with a fresh login, or a sign out, after the # in the address.
+async function twinTakeHandoff(){
+ const h=location.hash||'';
+ if(!/ft_at=|ft_signout=/.test(h))return;
+ const q=new URLSearchParams(h.slice(1));
+ try{history.replaceState(null,'',location.pathname+location.search)}catch(e){location.hash=''}
+ try{
+  if(q.get('ft_signout')){await sb.auth.signOut();toast('Signed out from Field Twin Teal');return}
+  const at=q.get('ft_at'),rt=q.get('ft_rt'),em=q.get('ft_email')||'';
+  if(!at||!rt)return;
+  const {data}=await sb.auth.getSession();
+  const cur=data&&data.session?data.session.user:null;
+  if(cur&&(!em||cur.email===em))return;
+  const r=await sb.auth.setSession({access_token:at,refresh_token:rt});
+  if(r.error)toast('Sign in from Field Twin Teal failed, '+r.error.message);else toast('Signed in from Field Twin Teal');
+ }catch(e){}
+}
 async function cloudInit(){
  renderAccount();
  if(!sb)return;
+ await twinTakeHandoff();
  try{const {data}=await sb.auth.getSession();setUser(data&&data.session?data.session.user:null)}catch(e){}
  sb.auth.onAuthStateChange((ev,s)=>setUser(s?s.user:null));
  pullCloud(true);
