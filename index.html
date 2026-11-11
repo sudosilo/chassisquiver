@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="chassisquiver-v1-config.js"></script>
+<script>try{var _c=JSON.parse(localStorage.getItem('chassisquiver-v1-cfg')||'{}'),_n=_c.night,_h=new Date().getHours();if(_n==='on'||(_n!=='off'&&(_h>=19||_h<6)))document.documentElement.setAttribute('data-theme','night')}catch(e){}</script>
 <style>
 /* Field Twin family look, roads edition: a bench instrument. White plot panels with ruled axes and units,
    figures in a fixed width face, trace colors kept the same everywhere so the keys can be trusted. */
@@ -26,16 +27,16 @@ body{display:flex;flex-direction:column;overflow:hidden}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 :focus-visible{outline:3px solid #7fb0f0;outline-offset:2px}
-header{display:flex;align-items:center;gap:10px;min-height:56px;padding:6px 10px;border-bottom:2px solid var(--ink);background:var(--panel);flex:0 0 auto}
-.iconbtn{width:44px;height:44px;flex:0 0 auto;border:2px solid var(--ink);border-radius:8px;background:var(--panel);font-size:20px;font-weight:800;color:var(--ink)}
+header{display:flex;align-items:center;gap:10px;min-height:56px;padding:6px 10px;border-bottom:2px solid var(--edge);background:var(--panel);flex:0 0 auto}
+.iconbtn{width:44px;height:44px;flex:0 0 auto;border:2px solid var(--edge);border-radius:8px;background:var(--panel);font-size:20px;font-weight:800;color:var(--ink)}
 .iconbtn:active{background:var(--wash)}
 h1{flex:1;min-width:0;text-align:center;font-size:17px;font-weight:800;letter-spacing:3px;line-height:1.1;white-space:nowrap}
 h1 small{display:block;margin-top:3px;font-size:13px;font-weight:600;letter-spacing:0;color:var(--mute);overflow:hidden;text-overflow:ellipsis}
 h1 small i{font-style:normal;color:var(--glaucous)}
-.ft-sites{display:flex;height:38px;background:var(--panel);border-bottom:2px solid var(--ink);flex:0 0 auto}
+.ft-sites{display:flex;height:38px;background:var(--panel);border-bottom:2px solid var(--edge);flex:0 0 auto}
 .ft-sites a{flex:1;display:flex;align-items:center;justify-content:center;font:800 14px var(--sans);letter-spacing:.3px;color:var(--mute);text-decoration:none}
-.ft-sites a.on{color:var(--accent);box-shadow:inset 0 -4px 0 var(--ink)}
-#modes{display:flex;overflow-x:auto;padding:0 6px;background:var(--panel);border-bottom:2px solid var(--ink);flex:0 0 auto;scrollbar-width:none}
+.ft-sites a.on{color:var(--accent);box-shadow:inset 0 -4px 0 var(--edge)}
+#modes{display:flex;overflow-x:auto;padding:0 6px;background:var(--panel);border-bottom:2px solid var(--edge);flex:0 0 auto;scrollbar-width:none}
 #modes::-webkit-scrollbar{display:none}
 #modes button{flex:1 0 auto;border:0;background:none;padding:11px 10px 10px;font-size:14px;font-weight:600;color:var(--mute);white-space:nowrap}
 #modes button.sel{color:var(--accent);font-weight:800;box-shadow:inset 0 -3px 0 var(--accent)}
@@ -56,16 +57,16 @@ main{flex:1;position:relative;min-height:0}
 .ro i{display:block;font:400 10.5px var(--mono);font-style:normal;color:var(--mute);margin-top:1px}
 .trip{font:400 12px var(--mono);color:var(--mute);text-align:center;flex:0 0 auto}
 .trip.rec{color:var(--bad)}
-footer{display:flex;gap:10px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:2px solid var(--ink);background:var(--panel);flex:0 0 auto}
-footer button{flex:1;height:48px;border-radius:8px;border:2px solid var(--ink);background:var(--panel);font-size:16px;font-weight:800;color:var(--ink)}
+footer{display:flex;gap:10px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:2px solid var(--edge);background:var(--panel);flex:0 0 auto}
+footer button{flex:1;height:48px;border-radius:8px;border:2px solid var(--edge);background:var(--panel);font-size:16px;font-weight:800;color:var(--ink)}
 footer button:active{transform:translate(3px,3px);box-shadow:none!important}
-footer button.primary{background:var(--accent);color:#fff;box-shadow:3px 3px 0 var(--ink)}
+footer button.primary{background:var(--accent);color:#fff;box-shadow:3px 3px 0 var(--edge)}
 footer button.primary.live{background:var(--panel);color:var(--ink);box-shadow:none}
-footer button.recon{background:var(--bad);color:#fff;border-color:var(--ink)}
+footer button.recon{background:var(--bad);color:#fff;border-color:var(--edge)}
 .hide{display:none!important}
-#scrim{position:fixed;inset:0;background:rgba(11,26,43,.45);display:none;z-index:1500}
+#scrim{position:fixed;inset:0;background:var(--shade);display:none;z-index:1500}
 #scrim.on{display:block}
-#drawer{position:fixed;top:0;left:0;bottom:0;width:min(84vw,320px);background:var(--panel);border-right:2px solid var(--ink);z-index:1600;transform:translateX(-102%);transition:transform .2s;overflow-y:auto;padding:14px 14px 40px}
+#drawer{position:fixed;top:0;left:0;bottom:0;width:min(84vw,320px);background:var(--panel);border-right:2px solid var(--edge);z-index:1600;transform:translateX(-102%);transition:transform .2s;overflow-y:auto;padding:14px 14px 40px}
 #drawer.on{transform:none}
 .dhead{font-size:16px;font-weight:800;letter-spacing:3px;margin-bottom:2px}
 .dhead span{display:block;font-size:13px;font-weight:600;letter-spacing:0;color:var(--mute);margin-top:3px}
@@ -73,7 +74,7 @@ footer button.recon{background:var(--bad);color:#fff;border-color:var(--ink)}
 .note{font-size:13px;color:var(--mute);line-height:1.45;margin-bottom:10px}
 #drawer button.item{display:block;width:100%;text-align:left;min-height:46px;padding:10px 12px;margin-bottom:6px;border:1.5px solid var(--line);border-radius:6px;background:var(--panel);font-size:16px;font-weight:600;color:var(--ink)}
 #drawer button.item:active{background:var(--wash)}
-#drawer button.item.sel{border-color:var(--ink);background:var(--ink);color:#fff}
+#drawer button.item.sel{border-color:var(--solid);background:var(--solid);color:var(--on-solid)}
 #drawer button.item.primary{background:var(--accent);border-color:var(--accent);color:#fff;text-align:center;font-weight:800}
 #drawer label,.mrow label{display:block;font-size:13px;font-weight:600;color:var(--mute);margin-bottom:12px}
 #drawer label output,.mrow label output{float:right;font-family:var(--mono);color:var(--ink)}
@@ -82,9 +83,9 @@ select,input[type=text],input[type=number],input[type=email],input[type=password
 select:focus,input:focus{border-color:var(--accent);outline:0;box-shadow:0 0 0 3px var(--wash)}
 #drawer label.chk{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:400;color:var(--ink)}
 #drawer label.chk input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
-#modal{position:fixed;inset:0;background:rgba(11,26,43,.45);display:none;z-index:1800;align-items:center;justify-content:center;padding:14px}
+#modal{position:fixed;inset:0;background:var(--shade);display:none;z-index:1800;align-items:center;justify-content:center;padding:14px}
 #modal.on{display:flex}
-.card{background:var(--panel);border:2px solid var(--ink);border-radius:10px;max-height:88vh;width:100%;max-width:520px;display:flex;flex-direction:column}
+.card{background:var(--panel);border:2px solid var(--edge);border-radius:10px;max-height:88vh;width:100%;max-width:520px;display:flex;flex-direction:column}
 .mh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 10px 10px 16px;border-bottom:1px solid var(--line)}
 .mh b{font-size:18px;font-weight:800}
 #mBody{padding:14px 16px 16px;overflow-y:auto;font-size:15px;line-height:1.5}
@@ -94,11 +95,11 @@ select:focus,input:focus{border-color:var(--accent);outline:0;box-shadow:0 0 0 3
 .mbtns{display:flex;gap:8px;margin-top:10px}
 .mbtns button{flex:1;min-height:46px;border-radius:6px;border:1.5px solid var(--line);background:var(--panel);font-size:15px;font-weight:600;color:var(--ink)}
 .mbtns button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:800}
-#toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 14px;border-radius:8px;font-size:14px;font-weight:600;display:none;z-index:2000;max-width:90vw;text-align:center}
+#toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);background:var(--solid);color:var(--on-solid);padding:11px 14px;border-radius:8px;font-size:14px;font-weight:600;display:none;z-index:2000;max-width:90vw;text-align:center}
 #toast.on{display:block}
 .seg{display:flex;gap:6px;flex:0 0 auto}
 .seg button{flex:1;min-height:40px;border-radius:6px;border:1.5px solid var(--line);background:var(--panel);font-size:13px;font-weight:600;color:var(--ink)}
-.seg button.sel{border-color:var(--ink);background:var(--ink);color:#fff}
+.seg button.sel{border-color:var(--solid);background:var(--solid);color:var(--on-solid)}
 #vPick2{margin-top:0;flex:0 0 auto}
 #roadList{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-bottom:8px}
 .rd{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
@@ -125,6 +126,22 @@ select:focus,input:focus{border-color:var(--accent);outline:0;box-shadow:0 0 0 3
 .leaflet-popup-content b.ps{font:600 22px var(--mono);color:var(--ink)}
 .pbtns{display:flex;gap:6px;margin-top:6px}
 @media (prefers-reduced-motion:reduce){#drawer{transition:none}}
+
+/* night look: dim slate, not black, matching the map app. Trace colors lift a little so they stay clear. */
+:root{--edge:var(--ink);--solid:var(--ink);--on-solid:#fff;--shade:rgba(11,26,43,.45)}
+:root[data-theme=night]{--bg:#141c27;--panel:#1c2735;--ink:#e8edf4;--mute:#a9b6c7;--line:#3a4a61;--hair:#2a374a;--accent:#7db3f5;--wash:#26384f;--glaucous:#8fa9d6;
+--x:#f0776a;--y:#5fc88a;--z:#7db3f5;--road:#e59a4e;--eng:#a99bf2;--body:#5fc88a;--bad:#ff8f85;--good:#5fc88a;
+--edge:#55677f;--solid:#dfe7f1;--on-solid:#0b1a2b;--shade:rgba(0,0,0,.55);color-scheme:dark}
+:root[data-theme=night] footer button.primary,:root[data-theme=night] #drawer button.item.primary,:root[data-theme=night] .mbtns button.primary{background:#2f6fcf;border-color:#2f6fcf;color:#fff}
+:root[data-theme=night] footer button.primary{border-color:var(--edge)}
+:root[data-theme=night] footer button.primary.live{background:var(--panel);color:var(--ink)}
+:root[data-theme=night] footer button.recon{background:#c2453c}
+:root[data-theme=night] #map{background:#0f1722}
+:root[data-theme=night] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.88) saturate(.55)}
+:root[data-theme=night] .leaflet-bar a{background:var(--panel)!important;color:var(--ink)!important;border-color:var(--hair)!important}
+:root[data-theme=night] .leaflet-popup-content-wrapper,:root[data-theme=night] .leaflet-popup-tip{background:var(--panel);color:var(--ink)}
+:root[data-theme=night] .leaflet-control-attribution{background:rgba(20,28,39,.75)!important;color:var(--mute)!important}
+:root[data-theme=night] ::placeholder{color:#7f8ea3}
 </style>
 </head>
 <body>
@@ -235,6 +252,7 @@ select:focus,input:focus{border-color:var(--accent);outline:0;box-shadow:0 0 0 3
 <label>Steering smoothing<select id="sSmooth"><option value="6">Quick</option><option value="3">Normal</option><option value="1.2">Calm</option></select></label>
 <label>Bump and spike threshold <output id="oBump"></output><input type="range" id="sBump" min="1" max="10" step="0.5"></label>
 <label class="chk"><input type="checkbox" id="sWake"> Keep screen awake</label>
+<label>Night look<select id="sNight"><option value="auto">Automatic, sunset to sunrise</option><option value="on">Always on</option><option value="off">Always off</option></select></label>
 <div class="dsec">My vehicles</div>
 <label>Driving now<select id="vPick"></select></label>
 <div class="seg" style="margin-bottom:12px"><button id="vAdd">Add vehicle</button><button id="vDel">Remove</button></div>
@@ -262,7 +280,9 @@ const SITE=/^https?:/.test(location.protocol)?location.origin+'/':'https://field
 
 const DEG=180/Math.PI;
 const $=id=>document.getElementById(id);
-const COL={bg:'#f2f4f7',panel:'#ffffff',ink:'#0b1a2b',mute:'#44556a',line:'#c9d2dc',grid:'#c9d2dc',hair:'#e9edf2',accent:'#0b4ea2',mark:'#0b4ea2',x:'#c0392b',y:'#1b7a43',z:'#0b4ea2',road:'#b5651d',eng:'#5b46c9',body:'#1b7a43',bad:'#b3261e'};
+const COL_DAY={bg:'#f2f4f7',panel:'#ffffff',ink:'#0b1a2b',mute:'#44556a',line:'#c9d2dc',grid:'#c9d2dc',hair:'#e9edf2',accent:'#0b4ea2',mark:'#0b4ea2',x:'#c0392b',y:'#1b7a43',z:'#0b4ea2',road:'#b5651d',eng:'#5b46c9',body:'#1b7a43',bad:'#b3261e',veil:'rgba(255,255,255,0.85)'};
+const COL_NIGHT={bg:'#141c27',panel:'#1c2735',ink:'#e8edf4',mute:'#a9b6c7',line:'#3a4a61',grid:'#3a4a61',hair:'#27344a',accent:'#7db3f5',mark:'#7db3f5',x:'#f0776a',y:'#5fc88a',z:'#7db3f5',road:'#e59a4e',eng:'#a99bf2',body:'#5fc88a',bad:'#ff8f85',veil:'rgba(28,39,53,0.85)'};
+const COL=Object.assign({},COL_DAY);
 const TITLES={scope:'Scope',vib:'Vibration',spec:'Spectrum',tele:'Telemetry',road:'Road quality',map:'Road map',roads:'Road ratings'};
 const VTYPES={car:'Car',suv:'SUV',pickup:'Pickup',dually:'Dually',van:'Van',box:'Box truck',semi:'Semi',rv:'RV',other:'Other'};
 const KEY='chassisquiver-v1-cfg',RKEY='chassisquiver-v1-runs';
@@ -942,7 +962,7 @@ function plot(c,o){
  return {x,d,W,H,L,T,pw,ph,X,Y};
 }
 function hline(P,v,col,dash,w){const {x,d,L,pw,Y}=P,yy=Y(v);x.strokeStyle=col;x.lineWidth=(w||1.2)*d;x.setLineDash(dash?dash.map(n=>n*d):[]);x.beginPath();x.moveTo(L,yy);x.lineTo(L+pw,yy);x.stroke();x.setLineDash([])}
-function note(P,text,px,py,col,align){const {x,d}=P;x.font=(10*d)+'px '+FONT;x.textAlign=align||'left';const tw=x.measureText(text).width,ax=align==='right'?px-tw:px;x.fillStyle='rgba(255,255,255,0.85)';x.fillRect(ax-3*d,py-10*d,tw+6*d,13*d);x.fillStyle=col||COL.mute;x.fillText(text,px,py);x.textAlign='left'}
+function note(P,text,px,py,col,align){const {x,d}=P;x.font=(10*d)+'px '+FONT;x.textAlign=align||'left';const tw=x.measureText(text).width,ax=align==='right'?px-tw:px;x.fillStyle=COL.veil;x.fillRect(ax-3*d,py-10*d,tw+6*d,13*d);x.fillStyle=col||COL.mute;x.fillText(text,px,py);x.textAlign='left'}
 function scopeSpan(){return N/Math.max(20,S.rate||60)}
 function drawScope(){
  const full=6/CFG.gain,span=scopeSpan();
@@ -1077,6 +1097,7 @@ about:['About and safety',
 '<p>Field Twin Glaucous, first built as Chassisquiver, turns the motion sensors in your phone into a small automotive companion. It reads the accelerometer, gyroscope and GPS and splits what it feels into body motion, road vibration and engine vibration, plus steering angle, pitch, and a road quality score that it maps along the roads you drive.</p>'+
 '<p>Safety first. Mount the phone on the rim or a spoke of the steering wheel, never on the center pad, because the airbag deploys from the center and would launch the phone. Use a mount that holds tight. Press Start and Recenter before you drive and leave the screen alone while the car is moving. Auto logging handles the runs on its own, and a passenger can do anything else.</p>'+
 '<p>Your runs save on this phone. When you sign in, they also sync to your account. With sharing on, other people can see your runs on the map and in road ratings, with the first and last 0.2 miles of each path left out by default so trips do not point at your driveway. Turn sharing off in the menu to keep runs private to your account. Scores are calculated automatically from what the sensors record.</p>'+
+'<p>Night look is a dim slate version of the screen and the graphs for driving after dark. It turns on by itself between sunset and sunrise, and Night look under Settings in the menu sets it to automatic, always on or always off.</p>'+
 '<p>Road names come from OpenStreetMap through its Nominatim lookup, and the map uses OpenStreetMap tiles.</p>'+
 '<p>These readings are for fun and curiosity. Phone sensors are not calibrated test equipment.</p>'],
 scope:['Scope',
@@ -1162,7 +1183,7 @@ function syncSettings(){
  $('sSplit').value=CFG.split;$('oSplit').textContent=CFG.split+' Hz';
  $('sCyl').value=String(CFG.cyl);$('sSmooth').value=String(CFG.smooth);
  $('sBump').value=CFG.bump;$('oBump').textContent=CFG.bump+' m/s²';
- $('sWake').checked=!!CFG.wake;$('sGps').checked=!!CFG.gps;$('sAuto').checked=!!CFG.auto;$('sShare').checked=!!CFG.share;$('sTrim').checked=!!CFG.trim;
+ $('sNight').value=CFG.night==='on'||CFG.night==='off'?CFG.night:'auto';nightApply();$('sWake').checked=!!CFG.wake;$('sGps').checked=!!CFG.gps;$('sAuto').checked=!!CFG.auto;$('sShare').checked=!!CFG.share;$('sTrim').checked=!!CFG.trim;
  const v=activeV();$('vNick').value=v.nick||'';$('vRental').checked=!!v.rental;$('vType').value=v.type;$('vMake').value=v.make;$('vModel').value=v.model;$('vYear').value=v.year;$('vMiles').value=v.miles;$('vTires').value=v.tires;$('vTireType').value=v.tiretype;$('vSusp').value=v.susp;
  const opts=CFG.vehicles.map(x=>'<option value="'+esc(x.id)+'">'+esc(vName(x))+(x.rental?' (rental)':'')+'</option>').join('');
  $('vPick').innerHTML=opts;$('vPick2').innerHTML=opts;$('vPick').value=v.id;$('vPick2').value=v.id;
@@ -1174,6 +1195,27 @@ $('sSplit').oninput=e=>{CFG.split=+e.target.value;saveCfg();syncSettings()};
 $('sCyl').onchange=e=>{CFG.cyl=+e.target.value;saveCfg()};
 $('sSmooth').onchange=e=>{CFG.smooth=+e.target.value;saveCfg()};
 $('sBump').oninput=e=>{CFG.bump=+e.target.value;saveCfg();syncSettings()};
+// Night look: a dim slate version of the screen and the graphs. Automatic follows sunset and sunrise at the last
+// GPS fix, or the clock when there is no fix yet. The setting is kept with the other settings on this phone.
+function sunTimes(lat,lon,d){
+ const rad=Math.PI/180,base=Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()),day=Math.floor((base-Date.UTC(d.getFullYear(),0,0))/86400000),g=2*Math.PI/365*(day-1);
+ const eq=229.18*(0.000075+0.001868*Math.cos(g)-0.032077*Math.sin(g)-0.014615*Math.cos(2*g)-0.040849*Math.sin(2*g));
+ const dec=0.006918-0.399912*Math.cos(g)+0.070257*Math.sin(g)-0.006758*Math.cos(2*g)+0.000907*Math.sin(2*g)-0.002697*Math.cos(3*g)+0.00148*Math.sin(3*g);
+ const q=Math.cos(90.833*rad)/(Math.cos(lat*rad)*Math.cos(dec))-Math.tan(lat*rad)*Math.tan(dec);
+ if(q>1||q<-1)return null;const ha=Math.acos(q)/rad;
+ return {rise:base+(720-4*(lon+ha)-eq)*60000,set:base+(720-4*(lon-ha)-eq)*60000};
+}
+function nightApply(){
+ const m=CFG.night==='on'||CFG.night==='off'?CFG.night:'auto',d=new Date();
+ const pt=(S.gps&&S.gps.prev)||CFG.nightSpot||null;
+ if(S.gps&&S.gps.prev&&(!CFG.nightSpot||hav(CFG.nightSpot,S.gps.prev)>20000)){CFG.nightSpot=[S.gps.prev[0],S.gps.prev[1]];saveCfg()}
+ const t=pt?sunTimes(pt[0],pt[1],d):null,h=d.getHours()+d.getMinutes()/60;
+ const dark=t?(d.getTime()<t.rise||d.getTime()>t.set):(h>=19||h<6),on=m==='on'||(m==='auto'&&dark);
+ if(on)document.documentElement.setAttribute('data-theme','night');else document.documentElement.removeAttribute('data-theme');
+ Object.assign(COL,on?COL_NIGHT:COL_DAY);
+}
+$('sNight').onchange=e=>{CFG.night=e.target.value;saveCfg();nightApply()};
+setInterval(nightApply,60000);
 $('sWake').onchange=e=>{CFG.wake=e.target.checked;saveCfg();if(CFG.wake)wake();else if(wakeLock){try{wakeLock.release()}catch(x){}wakeLock=null}};
 $('sGps').onchange=e=>{CFG.gps=e.target.checked;saveCfg();if(!CFG.gps)gpsStop();else if(S.on)gpsStart()};
 $('sAuto').onchange=e=>{CFG.auto=e.target.checked;saveCfg()};
